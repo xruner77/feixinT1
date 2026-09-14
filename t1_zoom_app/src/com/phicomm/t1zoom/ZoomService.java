@@ -52,13 +52,17 @@ public class ZoomService extends Service {
             final int b = prefs.getInt("brightness", 0);
             final int c = prefs.getInt("contrast", 0);
             final int s = prefs.getInt("saturation", 0);
+            final int h = prefs.getInt("hue", 0);
             final int d = prefs.getInt("dnlp", 0);
+            final int cm = prefs.getInt("cm", 0);
 
             // Pre-set in-memory tracking so status API is instantly accurate
             AdbClient.setCurBrightness(b);
             AdbClient.setCurContrast(c);
             AdbClient.setCurSaturation(s);
+            AdbClient.setCurHue(h);
             AdbClient.setCurDnlp(d);
+            AdbClient.setCurCm(cm);
 
             new Thread(new Runnable() {
                 @Override
@@ -66,11 +70,15 @@ public class ZoomService extends Service {
                     try {
                         // Wait for system and adbd to be ready
                         Thread.sleep(1500);
-                        Log.i(TAG, "Applying restored PQ to hardware: b=" + b + ", c=" + c + ", s=" + s + ", d=" + d);
+                        Log.i(TAG, "Applying restored PQ to hardware: b=" + b + ", c=" + c + ", s=" + s + ", h=" + h + ", d=" + d + ", cm=" + cm);
                         if (b != 0) AdbClient.setBrightness(b);
                         if (c != 0) AdbClient.setContrast(c);
-                        if (s != 0) AdbClient.setSaturation(s);
+                        if (s != 0 || h != 0) {
+                            AdbClient.setSaturation(s);
+                            AdbClient.setHue(h);
+                        }
                         if (d != 0) AdbClient.setDnlp(d);
+                        if (cm != 0) AdbClient.setCm(cm);
                     } catch (Exception e) {
                         Log.e(TAG, "Error restoring PQ: " + e.getMessage());
                     }
@@ -239,12 +247,17 @@ public class ZoomService extends Service {
                                 } else if ("saturation".equals(item)) {
                                     AdbClient.setSaturation(0);
                                     savePqPref("saturation", 0);
+                                } else if ("hue".equals(item)) {
+                                    AdbClient.setHue(0);
+                                    savePqPref("hue", 0);
                                 } else if ("all".equals(item)) {
                                     AdbClient.resetAllPq();
                                     savePqPref("brightness", 0);
                                     savePqPref("contrast", 0);
                                     savePqPref("saturation", 0);
+                                    savePqPref("hue", 0);
                                     savePqPref("dnlp", 0);
+                                    savePqPref("cm", 0);
                                 }
                                 sendJson(out, "{\"status\":\"ok\",\"action\":\"reset\",\"item\":\"" + item + "\"}");
                             } else if ("brightness".equals(type) && valStr != null) {
@@ -262,11 +275,21 @@ public class ZoomService extends Service {
                                 AdbClient.setSaturation(val);
                                 savePqPref("saturation", val);
                                 sendJson(out, "{\"status\":\"ok\",\"type\":\"saturation\",\"val\":" + val + "}");
+                            } else if ("hue".equals(type) && valStr != null) {
+                                int val = Integer.parseInt(valStr);
+                                AdbClient.setHue(val);
+                                savePqPref("hue", val);
+                                sendJson(out, "{\"status\":\"ok\",\"type\":\"hue\",\"val\":" + val + "}");
                             } else if ("dnlp".equals(type) && valStr != null) {
                                 int val = Integer.parseInt(valStr);
                                 AdbClient.setDnlp(val);
                                 savePqPref("dnlp", val);
                                 sendJson(out, "{\"status\":\"ok\",\"type\":\"dnlp\",\"val\":" + val + "}");
+                            } else if ("cm".equals(type) && valStr != null) {
+                                int val = Integer.parseInt(valStr);
+                                AdbClient.setCm(val);
+                                savePqPref("cm", val);
+                                sendJson(out, "{\"status\":\"ok\",\"type\":\"cm\",\"val\":" + val + "}");
                             } else {
                                 sendJson(out, "{\"status\":\"error\",\"msg\":\"invalid params\"}");
                             }
@@ -285,7 +308,9 @@ public class ZoomService extends Service {
                                 ",\"brightness\":" + AdbClient.getCurBrightness() +
                                 ",\"contrast\":" + AdbClient.getCurContrast() +
                                 ",\"saturation\":" + AdbClient.getCurSaturation() +
-                                ",\"dnlp\":" + AdbClient.getCurDnlp() + "}");
+                                ",\"hue\":" + AdbClient.getCurHue() +
+                                ",\"dnlp\":" + AdbClient.getCurDnlp() +
+                                ",\"cm\":" + AdbClient.getCurCm() + "}");
                     } else {
                         // Serve Mobile Remote HTML Page
                         sendHtml(out, getMobileHtml());
@@ -434,8 +459,16 @@ public class ZoomService extends Service {
         sb.append("<input type=\"range\" id=\"range-saturation\" min=\"-100\" max=\"100\" value=\"0\" step=\"1\" oninput=\"onSlide('saturation', this.value)\">");
         sb.append("<div class=\"range-labels\"><span>-100 (纯黑白)</span><span>0 (默认)</span><span>+100 (鲜艳浓郁)</span></div></div>");
 
+        // Skin Tone / Hue Slider
+        sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">👤 肤色冷暖微调 (Hue / 色相)</span><div class=\"pq-controls\"><span id=\"val-hue\" class=\"val-badge\">0</span><button class=\"btn-rst\" onclick=\"resetPq('hue')\">↺ 复位</button></div></div>");
+        sb.append("<input type=\"range\" id=\"range-hue\" min=\"-50\" max=\"50\" value=\"0\" step=\"1\" oninput=\"onSlide('hue', this.value)\">");
+        sb.append("<div class=\"range-labels\"><span>-50 (红润/暖肤色)</span><span>0 (标准)</span><span>+50 (偏冷/青绿)</span></div></div>");
+
         // DNLP toggle
         sb.append("<button id=\"btn-dnlp\" class=\"btn-dnlp\" onclick=\"toggleDnlp()\"><span>✨ 硬件动态对比度 (DNLP 智能去灰)</span><span id=\"dnlp-txt\" class=\"status-tag\">已关闭</span></button>");
+
+        // CM Color Management toggle
+        sb.append("<button id=\"btn-cm\" class=\"btn-dnlp\" onclick=\"toggleCm()\" style=\"margin-top:8px;\"><span>🎭 CM2 硬件色彩管理 (智能肤色保护)</span><span id=\"cm-txt\" class=\"status-tag\">已关闭</span></button>");
 
         // Reset All PQ
         sb.append("<button class=\"btn-reset-pq\" onclick=\"resetPq('all')\">↺ 复位所有画质参数至默认 (0)</button>");
@@ -465,6 +498,7 @@ public class ZoomService extends Service {
         sb.append("<div id=\"toast\" class=\"toast\">操作已生效</div>");
         sb.append("<script>");
         sb.append("let dnlpVal = 0;");
+        sb.append("let cmVal = 0;");
         sb.append("const timers = {};");
         sb.append("function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1400);}");
         sb.append("function fmtVal(v){const n=parseInt(v);return n>0?('+'+n):(''+n);}");
@@ -475,12 +509,13 @@ public class ZoomService extends Service {
         sb.append("    fetch('/api/pq?type='+type+'&val='+val).then(r=>r.json()).then(d=>toast(getName(type)+' 已设为 '+fmtVal(val))).catch(e=>toast('设置失败'));");
         sb.append("  }, 60);");
         sb.append("}");
-        sb.append("function getName(t){if(t==='brightness')return '亮度';if(t==='contrast')return '对比度';if(t==='saturation')return '色彩';return t;}");
+        sb.append("function getName(t){if(t==='brightness')return '亮度';if(t==='contrast')return '对比度';if(t==='saturation')return '色彩';if(t==='hue')return '肤色/色相';return t;}");
         sb.append("function resetPq(type){");
         sb.append("  if(type==='brightness'||type==='all'){document.getElementById('range-brightness').value=0;document.getElementById('val-brightness').textContent='0';}");
         sb.append("  if(type==='contrast'||type==='all'){document.getElementById('range-contrast').value=0;document.getElementById('val-contrast').textContent='0';}");
         sb.append("  if(type==='saturation'||type==='all'){document.getElementById('range-saturation').value=0;document.getElementById('val-saturation').textContent='0';}");
-        sb.append("  if(type==='all'){setDnlpUI(0);}");
+        sb.append("  if(type==='hue'||type==='all'){document.getElementById('range-hue').value=0;document.getElementById('val-hue').textContent='0';}");
+        sb.append("  if(type==='all'){setDnlpUI(0);setCmUI(0);}");
         sb.append("  fetch('/api/pq?type=reset&item='+type).then(r=>r.json()).then(d=>toast((type==='all'?'全部画质':getName(type))+' 已复位为 0')).catch(e=>toast('复位失败'));");
         sb.append("}");
         sb.append("function toggleDnlp(){");
@@ -494,6 +529,17 @@ public class ZoomService extends Service {
         sb.append("  if(v===1){btn.classList.add('active');txt.textContent='已开启 (去灰增强)';txt.style.background='#22c55e';txt.style.color='#000';}");
         sb.append("  else{btn.classList.remove('active');txt.textContent='已关闭';txt.style.background='rgba(0,0,0,0.3)';txt.style.color='#cbd5e1';}");
         sb.append("}");
+        sb.append("function toggleCm(){");
+        sb.append("  const nVal = cmVal === 1 ? 0 : 1;");
+        sb.append("  fetch('/api/pq?type=cm&val='+nVal).then(r=>r.json()).then(d=>{setCmUI(nVal);toast('CM 色彩与肤色保护 '+(nVal===1?'已开启':'已关闭'));}).catch(e=>toast('设置失败'));");
+        sb.append("}");
+        sb.append("function setCmUI(v){");
+        sb.append("  cmVal = v;");
+        sb.append("  const btn = document.getElementById('btn-cm');");
+        sb.append("  const txt = document.getElementById('cm-txt');");
+        sb.append("  if(v===1){btn.classList.add('active');txt.textContent='已开启 (保护肤色)';txt.style.background='#22c55e';txt.style.color='#000';}");
+        sb.append("  else{btn.classList.remove('active');txt.textContent='已关闭';txt.style.background='rgba(0,0,0,0.3)';txt.style.color='#cbd5e1';}");
+        sb.append("}");
         sb.append("function setZ(v){fetch('/api/zoom?val='+v).then(r=>r.json()).then(d=>toast('已变焦至 '+v+'% (切除黑边)')).catch(e=>toast('设置失败'));}");
         sb.append("function setM(v){fetch('/api/mode?val='+v).then(r=>r.json()).then(d=>toast('已切换屏幕模式 '+v)).catch(e=>toast('设置失败'));}");
         sb.append("function resetA(){fetch('/api/reset').then(r=>r.json()).then(d=>toast('已恢复 100% 原始比例')).catch(e=>toast('重置失败'));}");
@@ -502,7 +548,9 @@ public class ZoomService extends Service {
         sb.append("    if(d.brightness!==undefined){document.getElementById('range-brightness').value=d.brightness;document.getElementById('val-brightness').textContent=fmtVal(d.brightness);}");
         sb.append("    if(d.contrast!==undefined){document.getElementById('range-contrast').value=d.contrast;document.getElementById('val-contrast').textContent=fmtVal(d.contrast);}");
         sb.append("    if(d.saturation!==undefined){document.getElementById('range-saturation').value=d.saturation;document.getElementById('val-saturation').textContent=fmtVal(d.saturation);}");
+        sb.append("    if(d.hue!==undefined){document.getElementById('range-hue').value=d.hue;document.getElementById('val-hue').textContent=fmtVal(d.hue);}");
         sb.append("    if(d.dnlp!==undefined){setDnlpUI(d.dnlp);}");
+        sb.append("    if(d.cm!==undefined){setCmUI(d.cm);}");
         sb.append("  }).catch(()=>{});");
         sb.append("});");
         sb.append("</script></body></html>");

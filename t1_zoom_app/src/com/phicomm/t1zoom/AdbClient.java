@@ -145,20 +145,25 @@ public class AdbClient {
     private static int curBrightness = 0;
     private static int curContrast = 0;
     private static int curSaturation = 0;
+    private static int curHue = 0;
     private static int curDnlp = 0;
+    private static int curCm = 0;
 
     public static int getCurZoom() { return curZoom; }
     public static int getCurMode() { return curMode; }
     public static int getCurBrightness() { return curBrightness; }
     public static int getCurContrast() { return curContrast; }
     public static int getCurSaturation() { return curSaturation; }
+    public static int getCurHue() { return curHue; }
     public static int getCurDnlp() { return curDnlp; }
+    public static int getCurCm() { return curCm; }
 
     public static void setCurBrightness(int b) { curBrightness = b; }
     public static void setCurContrast(int c) { curContrast = c; }
     public static void setCurSaturation(int s) { curSaturation = s; }
+    public static void setCurHue(int h) { curHue = h; }
     public static void setCurDnlp(int d) { curDnlp = d; }
-
+    public static void setCurCm(int cm) { curCm = cm; }
 
     public static void initPqValues() {
         try {
@@ -173,10 +178,15 @@ public class AdbClient {
             String s = execute("cat /sys/class/amvecm/saturation_hue_pre").trim();
             String[] parts = s.split("\\s+");
             if (parts.length > 0) curSaturation = Integer.parseInt(parts[0]);
+            if (parts.length > 1) curHue = Integer.parseInt(parts[1]);
         } catch (Exception ignored) {}
         try {
             String d = execute("cat /sys/module/am_vecm/parameters/dnlp_en").trim();
             curDnlp = Integer.parseInt(d);
+        } catch (Exception ignored) {}
+        try {
+            String cm = execute("cat /sys/module/am_vecm/parameters/cm_en").trim();
+            curCm = Integer.parseInt(cm);
         } catch (Exception ignored) {}
     }
 
@@ -206,7 +216,24 @@ public class AdbClient {
 
     public static String setSaturation(int val) {
         curSaturation = val;
-        String cmd = "printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"echo " + val + " 0 > /sys/class/amvecm/saturation_hue_pre\"";
+        String cmd = "printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"echo " + curSaturation + " " + curHue + " > /sys/class/amvecm/saturation_hue_pre\"";
+        return execute(cmd);
+    }
+
+    public static String setHue(int val) {
+        curHue = val;
+        String cmd = "printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"echo " + curSaturation + " " + curHue + " > /sys/class/amvecm/saturation_hue_pre\"";
+        return execute(cmd);
+    }
+
+    public static String setCm(int val) {
+        curCm = val;
+        String cmd;
+        if (val == 1) {
+            cmd = "printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"echo 1 > /sys/module/am_vecm/parameters/cm_en; echo 1 > /sys/module/am_vecm/parameters/cm_level\"";
+        } else {
+            cmd = "printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"echo 0 > /sys/module/am_vecm/parameters/cm_en\"";
+        }
         return execute(cmd);
     }
 
@@ -232,8 +259,10 @@ public class AdbClient {
         curBrightness = 0;
         curContrast = 0;
         curSaturation = 0;
+        curHue = 0;
         curDnlp = 0;
-        String cmd = "printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"echo 0 > /sys/class/amvecm/brightness; echo 0 > /sys/class/video/brightness; echo 0 > /sys/class/video/contrast; echo 0 > /sys/class/amvecm/contrast; echo 0 0 > /sys/class/amvecm/saturation_hue_pre; echo 0x0 > /sys/class/amvecm/dnlp; echo 0 > /sys/module/am_vecm/parameters/dnlp_en; echo 0 > /sys/module/am_vecm/parameters/dnlp_en_2; echo blk_ext_dis > /sys/class/amvecm/pq_user_set\"";
+        curCm = 0;
+        String cmd = "printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"echo 0 > /sys/class/amvecm/brightness; echo 0 > /sys/class/video/brightness; echo 0 > /sys/class/video/contrast; echo 0 > /sys/class/amvecm/contrast; echo 0 0 > /sys/class/amvecm/saturation_hue_pre; echo 0x0 > /sys/class/amvecm/dnlp; echo 0 > /sys/module/am_vecm/parameters/dnlp_en; echo 0 > /sys/module/am_vecm/parameters/dnlp_en_2; echo blk_ext_dis > /sys/class/amvecm/pq_user_set; echo 0 > /sys/module/am_vecm/parameters/cm_en\"";
         return execute(cmd);
     }
 }
