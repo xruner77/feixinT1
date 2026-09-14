@@ -1,0 +1,66 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.class
+classes.dex
+
+# Build artifacts
+t1_zoom_app/bin/
+t1_zoom_app/unaligned.apk
+t1_zoom_app/res.zip
+
+# Large third-party APKs
+*.apk
+!T1ZoomHelper.apk
+
+# Android SDK build tools
+build_tools/
+
+# Executables and system DLLs
+*.exe
+*.dll
+mke2fs.conf
+source.properties
+NOTICE.txt
+
+# Pulled device binaries and ext4 block dumps
+systemcontrol
+lib*.so
+mediacodec
+phicomm_su
+framework.jar
+block_*.bin
+
+# Sensitive / credential files
+phiaccount_token_info.txt
+*.log
+
+# Scratch disassembly and probe scripts
+disasm*.py
+print_*.py
+find_*.py
+search_*.py
+inspect_*.py
+elf_read.py
+read_symbols.py
+list_all_services.py
+test_capstone.py
+test_boot.py
+test_kodi.py
+test_writes.py
+test_sat.py
+test_sat_parse.py
+test_printf_su.py
+test_timing.py
+full_verify.py
+check_link.py
+check_pq_state.py
+check_settings.py
+check_tools.py
+check_got.py
+check_elf.py
+parse_ext4.py
+parse_ext4_b64.py
+run_box_cmd.py
+verify_hw.py

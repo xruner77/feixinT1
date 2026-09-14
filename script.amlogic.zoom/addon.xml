@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="script.amlogic.zoom" name="晶晨硬件画面缩放" version="1.0.0" provider-name="Antigravity">
+  <requires>
+    <import addon="xbmc.python" version="3.0.0"/>
+  </requires>
+  <extension point="xbmc.python.script" library="default.py">
+    <provides>executable</provides>
+  </extension>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="zh_CN">晶晨 S912 硬件视频缩放与切黑边工具</summary>
+    <description lang="zh_CN">解决 Kodi 在 MediaCodec (Surface) 硬解下无法放大画面、裁切电影黑边的问题。直接调用底层 VPP 硬件缩放，零性能损耗。</description>
+    <platform>all</platform>
+  </extension>
+</addon>

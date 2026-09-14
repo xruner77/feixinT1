@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="#0f172a"
+    android:padding="32dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="斐讯 T1 画面缩放助手"
+        android:textSize="32sp"
+        android:textColor="#38bdf8"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="后台无线遥控服务已启动！手机在同一 Wi-Fi 下打开以下网址即可控制："
+        android:textSize="18sp"
+        android:textColor="#94a3b8"
+        android:layout_marginBottom="12dp" />
+
+    <TextView
+        android:id="@+id/tv_ip"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="http://192.168.123.98:8989"
+        android:textSize="28sp"
+        android:textColor="#facc15"
+        android:textStyle="bold"
+        android:layout_marginBottom="32dp" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_zoom_125"
+            android:layout_width="200dp"
+            android:layout_height="60dp"
+            android:text="125% 铺满幕布"
+            android:textSize="18sp"
+            android:layout_marginRight="16dp" />
+
+        <Button
+            android:id="@+id/btn_smart_stretch"
+            android:layout_width="200dp"
+            android:layout_height="60dp"
+            android:text="智能非线性拉伸"
+            android:textSize="18sp"
+            android:layout_marginRight="16dp" />
+
+        <Button
+            android:id="@+id/btn_reset"
+            android:layout_width="200dp"
+            android:layout_height="60dp"
+            android:text="恢复 100% 原始"
+            android:textSize="18sp" />
+    </LinearLayout>
+
+</LinearLayout>
