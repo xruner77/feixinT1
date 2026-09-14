@@ -200,19 +200,24 @@ public class AdbClient {
 
     public static String setContrast(int val) {
         curContrast = val;
-        String cmd = "printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"echo " + val + " > /sys/class/amvecm/contrast; echo " + val + " > /sys/class/video/contrast\"";
+        String cmd = "printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"echo " + val + " > /sys/class/video/contrast\"";
         return execute(cmd);
     }
 
     public static String setSaturation(int val) {
         curSaturation = val;
-        String cmd = "printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"echo \\\"" + val + " 0\\\" > /sys/class/amvecm/saturation_hue_pre\"";
+        String cmd = "printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"echo " + val + " 0 > /sys/class/amvecm/saturation_hue_pre\"";
         return execute(cmd);
     }
 
     public static String setDnlp(int val) {
         curDnlp = val;
-        String cmd = "printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"echo " + val + " > /sys/module/am_vecm/parameters/dnlp_en; echo 7 > /sys/module/am_vecm/parameters/dnlp_adj_level\"";
+        String cmd;
+        if (val == 1) {
+            cmd = "printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"echo 0x1 > /sys/class/amvecm/dnlp; echo 1 > /sys/module/am_vecm/parameters/dnlp_en; echo 1 > /sys/module/am_vecm/parameters/dnlp_en_2; echo 8 > /sys/module/am_vecm/parameters/dnlp_adj_level; echo 8 > /sys/module/am_vecm/parameters/ve_dnlp_adj_level; echo 255 > /sys/module/am_vecm/parameters/ve_dnlp_strength; echo blk_ext_en > /sys/class/amvecm/pq_user_set\"";
+        } else {
+            cmd = "printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"echo 0x0 > /sys/class/amvecm/dnlp; echo 0 > /sys/module/am_vecm/parameters/dnlp_en; echo 0 > /sys/module/am_vecm/parameters/dnlp_en_2; echo blk_ext_dis > /sys/class/amvecm/pq_user_set\"";
+        }
         return execute(cmd);
     }
 
@@ -228,8 +233,9 @@ public class AdbClient {
         curContrast = 0;
         curSaturation = 0;
         curDnlp = 0;
-        String cmd = "printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"echo 0 > /sys/class/amvecm/brightness; echo 0 > /sys/class/video/brightness; echo 0 > /sys/class/amvecm/contrast; echo 0 > /sys/class/video/contrast; echo \\\"0 0\\\" > /sys/class/amvecm/saturation_hue_pre; echo 0 > /sys/module/am_vecm/parameters/dnlp_en\"";
+        String cmd = "printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"echo 0 > /sys/class/amvecm/brightness; echo 0 > /sys/class/video/brightness; echo 0 > /sys/class/video/contrast; echo 0 > /sys/class/amvecm/contrast; echo 0 0 > /sys/class/amvecm/saturation_hue_pre; echo 0x0 > /sys/class/amvecm/dnlp; echo 0 > /sys/module/am_vecm/parameters/dnlp_en; echo 0 > /sys/module/am_vecm/parameters/dnlp_en_2; echo blk_ext_dis > /sys/class/amvecm/pq_user_set\"";
         return execute(cmd);
     }
 }
+
 

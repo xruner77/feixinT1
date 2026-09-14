@@ -64,3 +64,12 @@ parse_ext4.py
 parse_ext4_b64.py
 run_box_cmd.py
 verify_hw.py
+scratch/
+check_pq_syms.py
+test_amvecm_dnlp.py
+test_contrast_behavior.py
+test_dnlp_triggers.py
+test_full_dnlp.py
+test_order.py
+test_range_dnlp.py
+test_scale.py

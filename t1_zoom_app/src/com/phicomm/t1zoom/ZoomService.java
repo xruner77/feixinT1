@@ -415,24 +415,27 @@ public class ZoomService extends Service {
         // Card 1: Picture Quality (Brightness, Contrast, Saturation, DNLP)
         sb.append("<div class=\"card\"><div class=\"section-title\"><span>🎨 画面色彩与画质微调</span><span style=\"font-size:11px;font-weight:normal;color:#38bdf8;\">💾 自动记忆保存</span></div>");
 
+        sb.append("<div style=\"background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.25);border-radius:10px;padding:9px 12px;margin-bottom:14px;font-size:11px;color:#94a3b8;line-height:1.5;\">");
+        sb.append("<strong style=\"color:#38bdf8;\">💡 生效提示：</strong>画质、对比度与动态对比度(DNLP)由芯片 <strong>VPP 硬件层</strong>直接渲染，在<strong>播放电影/视频时（如 Kodi、影视仓、播放器）</strong>即时生效（不影响安卓桌面静态 UI）。");
+        sb.append("</div>");
 
         // Brightness Slider
         sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">☀️ 亮度 (Brightness)</span><div class=\"pq-controls\"><span id=\"val-brightness\" class=\"val-badge\">0</span><button class=\"btn-rst\" onclick=\"resetPq('brightness')\">↺ 复位</button></div></div>");
-        sb.append("<input type=\"range\" id=\"range-brightness\" min=\"-50\" max=\"50\" value=\"0\" step=\"1\" oninput=\"onSlide('brightness', this.value)\">");
-        sb.append("<div class=\"range-labels\"><span>-50 (压暗)</span><span>0 (默认)</span><span>+50 (提亮)</span></div></div>");
+        sb.append("<input type=\"range\" id=\"range-brightness\" min=\"-100\" max=\"100\" value=\"0\" step=\"1\" oninput=\"onSlide('brightness', this.value)\">");
+        sb.append("<div class=\"range-labels\"><span>-100 (极暗)</span><span>0 (默认)</span><span>+100 (极亮)</span></div></div>");
 
         // Contrast Slider
         sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">🌗 对比度 (Contrast)</span><div class=\"pq-controls\"><span id=\"val-contrast\" class=\"val-badge\">0</span><button class=\"btn-rst\" onclick=\"resetPq('contrast')\">↺ 复位</button></div></div>");
-        sb.append("<input type=\"range\" id=\"range-contrast\" min=\"-30\" max=\"30\" value=\"0\" step=\"1\" oninput=\"onSlide('contrast', this.value)\">");
-        sb.append("<div class=\"range-labels\"><span>-30 (柔和)</span><span>0 (默认)</span><span>+30 (通透)</span></div></div>");
+        sb.append("<input type=\"range\" id=\"range-contrast\" min=\"-100\" max=\"100\" value=\"0\" step=\"1\" oninput=\"onSlide('contrast', this.value)\">");
+        sb.append("<div class=\"range-labels\"><span>-100 (柔和/低反差)</span><span>0 (默认)</span><span>+100 (高反差/通透)</span></div></div>");
 
         // Saturation Slider
         sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">🌈 色彩饱和度 (Color)</span><div class=\"pq-controls\"><span id=\"val-saturation\" class=\"val-badge\">0</span><button class=\"btn-rst\" onclick=\"resetPq('saturation')\">↺ 复位</button></div></div>");
-        sb.append("<input type=\"range\" id=\"range-saturation\" min=\"-50\" max=\"50\" value=\"0\" step=\"1\" oninput=\"onSlide('saturation', this.value)\">");
-        sb.append("<div class=\"range-labels\"><span>-50 (淡雅/黑白)</span><span>0 (默认)</span><span>+50 (浓郁)</span></div></div>");
+        sb.append("<input type=\"range\" id=\"range-saturation\" min=\"-100\" max=\"100\" value=\"0\" step=\"1\" oninput=\"onSlide('saturation', this.value)\">");
+        sb.append("<div class=\"range-labels\"><span>-100 (纯黑白)</span><span>0 (默认)</span><span>+100 (鲜艳浓郁)</span></div></div>");
 
         // DNLP toggle
-        sb.append("<button id=\"btn-dnlp\" class=\"btn-dnlp\" onclick=\"toggleDnlp()\"><span>✨ 硬件动态对比度 (DNLP 去灰)</span><span id=\"dnlp-txt\" class=\"status-tag\">已关闭</span></button>");
+        sb.append("<button id=\"btn-dnlp\" class=\"btn-dnlp\" onclick=\"toggleDnlp()\"><span>✨ 硬件动态对比度 (DNLP 智能去灰)</span><span id=\"dnlp-txt\" class=\"status-tag\">已关闭</span></button>");
 
         // Reset All PQ
         sb.append("<button class=\"btn-reset-pq\" onclick=\"resetPq('all')\">↺ 复位所有画质参数至默认 (0)</button>");
