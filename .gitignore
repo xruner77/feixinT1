@@ -9,6 +9,10 @@ classes.dex
 t1_zoom_app/bin/
 t1_zoom_app/unaligned.apk
 t1_zoom_app/res.zip
+build/
+dist/
+*.spec
+T1_Adaptive_Seccomp_Patcher/
 
 # Large third-party APKs
 *.apk
