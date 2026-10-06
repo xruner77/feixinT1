@@ -212,32 +212,67 @@ class T1Patcher:
         assert len(new_block_data) == 4096
 
         # 8. 推送并安全注入
-        patch_b64 = base64.b64encode(new_block_data).decode("ascii")
-        self.log(f"[*] 正在执行物理块微创写入 (Block {target_block})...")
-        inject_cmd = (
-            f"echo '{patch_b64}' | base64 -d > /data/local/tmp/smart_patch.bin && "
-            f"dd if=/data/local/tmp/smart_patch.bin of=/dev/block/system bs=4096 seek={target_block} count=1 conv=notrunc && "
-            f"sync && echo 3 > /proc/sys/vm/drop_caches && "
-            f"rm -f /data/local/tmp/smart_patch.bin"
+        self.log(f"[*] 正在将补丁数据写入物理块 {target_block}...")
+        temp_local_bin = os.path.join(get_base_dir(), "_temp_patch_block.bin")
+        temp_local_sh = os.path.join(get_base_dir(), "_temp_run_patch.sh")
+
+        with open(temp_local_bin, "wb") as f:
+            f.write(new_block_data)
+
+        sh_script_content = (
+            "#!/system/bin/sh\n"
+            f"dd if=/data/local/tmp/smart_patch.bin of=/dev/block/system bs=4096 seek={target_block} count=1 conv=notrunc\n"
+            "sync\n"
+            "echo 3 > /proc/sys/vm/drop_caches\n"
         )
-        self.run_root(inject_cmd)
+        with open(temp_local_sh, "w", newline="\n", encoding="utf-8") as f:
+            f.write(sh_script_content)
+
+        try:
+            self.run_adb(["push", temp_local_bin, "/data/local/tmp/smart_patch.bin"])
+            self.run_adb(["push", temp_local_sh, "/data/local/tmp/run_patch.sh"])
+
+            out, err = self.run_root("sh /data/local/tmp/run_patch.sh")
+            self.log(f"[*] 写入执行输出: {out.strip()} {err.strip()}")
+
+            self.run_root("rm -f /data/local/tmp/smart_patch.bin /data/local/tmp/run_patch.sh")
+        finally:
+            if os.path.exists(temp_local_bin):
+                try: os.remove(temp_local_bin)
+                except: pass
+            if os.path.exists(temp_local_sh):
+                try: os.remove(temp_local_sh)
+                except: pass
 
         # 9. 验收与热重启
+        self.log(f"[*] 正在直接核验闪存芯片物理块 {target_block}...")
+        rechecked_block = self.get_block_b64(target_block)
+        flash_written = (b"sendto: 1" in rechecked_block)
+
         verify_txt, _ = self.run_root(f"head -n 5 {TARGET_POLICY}")
-        self.log("\n[+] 写入后验证策略文件输出:")
+        self.log("\n[+] 策略文件当前系统读取输出:")
         for line in verify_txt.strip().splitlines()[:5]:
             self.log("    " + line)
 
         if "sendto: 1" in verify_txt:
-            self.log("\n[+] 验证成功！sendto 白名单已永久注入物理闪存！")
+            self.log("\n[+] 验证成功！sendto 白名单已实时生效！")
             self.log("[*] 正在热重启 media.codec 解码器...")
             self.run_root("kill -9 $(pidof media.codec)")
             self.log("\n" + "=" * 60)
             self.log("[SUCCESS] 恭喜！当前固件 Seccomp 漏洞修复完成，Kodi 调参永久稳定！")
             self.log("=" * 60)
             return True
+        elif flash_written:
+            self.log("\n[+] 物理闪存芯片底层已 100% 成功写入补丁！")
+            self.log("[*] 当前内存 Page Cache 尚未刷新，需重启盒子以永久加载。")
+            self.log("[*] 正在向盒子发送重启命令...")
+            self.run_root("reboot")
+            self.log("\n" + "=" * 60)
+            self.log("[SUCCESS] 盒子已指令重启，重启完成后补丁将永久生效！")
+            self.log("=" * 60)
+            return True
         else:
-            self.log("\n[!] 校验未发现 sendto，请尝试重启盒子后再试。")
+            self.log("\n[!] 物理块回读未见 sendto，请检查 root 权限或设备状态。")
             return False
 
 def main():
