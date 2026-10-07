@@ -221,7 +221,7 @@ class T1Patcher:
 
         sh_script_content = (
             "#!/system/bin/sh\n"
-            f"dd if=/data/local/tmp/smart_patch.bin of=/dev/block/system bs=4096 seek={target_block} count=1 conv=notrunc\n"
+            f"dd if=/data/local/tmp/smart_patch.bin of=/dev/block/system bs=4096 seek={target_block} count=1\n"
             "sync\n"
             "echo 3 > /proc/sys/vm/drop_caches\n"
         )

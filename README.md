@@ -205,20 +205,28 @@ adb shell "echo 31183118 | su 0 sh -c 'echo 0 0 0 0 > /sys/class/video/crop'"
 - 当通过手机遥控器触发硬件放大（如 125%）时，服务会自动探测并向本地 Kodi 端口 9090 发送 JSON-RPC 指令（`Player.SetViewMode` -> `zoom`）；
 - 自动将 Kodi 的底层 `SurfaceView` 视窗强制展开为全屏，从源头上打通晶晨 VPP 硬件缩放的物理边界，彻底杜绝“仅在黑边内缩放”的问题。
 
-#### (5) 网页端全新升级（v3.0）：画面画质与色彩滑块微调
+#### (5) 网页端全新升级（v3.1）：画面画质微调与双拉伸模式增强
 手机或电脑浏览器打开 `http://192.168.123.98:8989`，全新界面已集成：
-1. **☀️ 亮度调节 (Brightness)**：滑块范围 `-50` ~ `+50`，支持实时拖动微调，配有独立 **【↺ 复位】** 按钮；
-2. **🌗 对比度调节 (Contrast)**：滑块范围 `-30` ~ `+30`，支持实时拖动微调，配有独立 **【↺ 复位】** 按钮；
-3. **🌈 色彩饱和度 (Saturation/Color)**：滑块范围 `-50` ~ `+50`，支持实时拖动微调，配有独立 **【↺ 复位】** 按钮；
-4. **✨ 硬件动态对比度 (DNLP 去灰)**：一键开关芯片硬件级直方图对比度优化；
-5. **🔄 全部画质复位**：一键将所有亮度、对比度、色彩参数重置回原厂默认值（0）。
-6. **💾 开机自动记忆（持久化存储）**：
-   通过 Android 原生 `SharedPreferences` 持久化，拖动滑块后自动静默保存。盒子冷开机、断电重启或快速启动时，后台服务自启后会自动将您上次调好的亮度、对比度、色彩与 DNLP 重新灌入芯片物理寄存器中，彻底省去开机重复调节的繁琐。
-7. **开放 REST API**：
-   - 获取当前参数：`/api/status`
-   - 调节画质：`/api/pq?type=brightness&val=15`、`/api/pq?type=contrast&val=10`、`/api/pq?type=saturation&val=20`、`/api/pq?type=dnlp&val=1`
-   - 独立复位：`/api/pq?type=reset&item=brightness`、`/api/pq?type=reset&item=contrast`、`/api/pq?type=reset&item=saturation`、`/api/pq?type=reset&item=all`
-   - 变焦拉伸：`/api/zoom?val=125`、`/api/mode?val=1`、`/api/reset`
+1. **☀️ 亮度调节 (Brightness)**：滑块范围 `-100` ~ `+100`，支持实时拖动微调，配有独立 **【↺ 复位】** 按钮；
+2. **🌗 对比度调节 (Contrast)**：滑块范围 `-100` ~ `+100`，支持实时拖动微调，配有独立 **【↺ 复位】** 按钮；
+3. **🌈 色彩饱和度 (Saturation/Color)**：滑块范围 `-100` ~ `+100`，支持实时拖动微调，配有独立 **【↺ 复位】** 按钮；
+4. **🌸 肤色保护 / 色相 (Hue)**：滑块范围 `-50` ~ `+50`，支持实时拖动微调，配有独立 **【↺ 复位】** 按钮；
+5. **✨ 硬件动态对比度 (DNLP 去灰)** 与 **🎭 CM2 色彩管理**：一键开关芯片硬件级直方图对比度与肤色优化；
+6. **📺 画面拉伸双模式**：支持【全屏强制拉伸】与【智能非线性拉伸（中间保真防人物变形）】，已通过驱动标签智能匹配，彻底消除写入误报；
+7. **🔍 系统与底层深度诊断 (Doctor)**：一键全面体检 Root 通道、底层硬件节点、Seccomp 补丁、视频硬解流及 Kodi 端口状态；
+8. **💾 开机自动记忆（持久化存储）**：通过 Android 原生 `SharedPreferences` 持久化，拖动滑块后自动静默保存。
+
+#### (6) 网友高能反馈：在线视频（TVBox / 影视仓）消除黑边实测捷径
+除了 Kodi 本地播放原盘大片外，很多朋友经常在 T1 上观看网络在线流媒体视频（如 TVBox、影视仓、FongMi、猫影视等）。多位网友实测反馈：
+- **播放核心**：在播放设置中切换为 **Exo 播放器 (ExoPlayer)**；
+- **缩放模式**：在播放界面的画面比例/缩放模式中选择 **“填充” (Fill)**；
+- 即可直接突破黑边限制，自动裁切上下黑边并铺满整块 16:9 屏幕！无需配置 9090 端口，简单直接，轻松搞定在线点播！
+
+#### (7) 开放 REST API：
+- 获取当前参数：`/api/status`
+- 调节画质：`/api/pq?type=brightness&val=15`、`/api/pq?type=contrast&val=10`、`/api/pq?type=saturation&val=20`、`/api/pq?type=dnlp&val=1`
+- 独立复位：`/api/pq?type=reset&item=brightness`、`/api/pq?type=reset&item=contrast`、`/api/pq?type=reset&item=saturation`、`/api/pq?type=reset&item=all`
+- 变焦拉伸：`/api/zoom?val=125`、`/api/mode?val=1`、`/api/reset`
 
 ---
 
@@ -301,7 +309,15 @@ adb shell "echo 31183118 | su 0 sh -c 'echo 0 0 0 0 > /sys/class/video/crop'"
 > 系统已通过底层将 Kodi 的 `guisettings.xml` 中的全局默认设置从 `4`（拉伸）恢复为 `0`（正常 Normal），以后打开任何视频均默认保真比例开播，不会再出现“默认拉伸畸变”的现象。
 
 #### 方式 2：通过 Kodi 本地 JSON-RPC 接口远程程控
-Kodi 在本地回环 `127.0.0.1:9090` 常驻开启了 JSON-RPC 接口，可以通过发送标准指令直接控制播放器视窗几何属性：
+
+> [!IMPORTANT]
+> **前提条件（在电视端 Kodi 中开启远程控制）**：  
+> Kodi 默认未开启外部应用程序远程控制端口，需在电视端使用遥控器开启一次（仅需设置一次）：  
+> 1. 进入 Kodi **【系统设置】 -> 【服务设置】 -> 【控制】** (Settings -> Services -> Control)；  
+> 2. 打开 **【允许通过 HTTP 进行远程控制】** (Allow remote control via HTTP，默认端口 8080)；  
+> 3. 打开 **【允许来自其他系统的应用程序远程控制】** (Allow remote control by applications on other systems，开启 9090 TCP 端口)。  
+> 开启后，Kodi 即在本地回环 `127.0.0.1:9090` 常驻开启 JSON-RPC 接口，可以通过发送标准指令直接控制播放器视窗几何属性：
+
 ```bash
 # 一键切换为【缩放 Zoom】模式（解除黑边视窗锁定，推荐！）
 echo '{"jsonrpc": "2.0", "method": "Player.SetViewMode", "params": {"viewmode": "zoom"}, "id": 1}' | nc 127.0.0.1 9090

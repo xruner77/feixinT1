@@ -68,7 +68,6 @@ public class ZoomService extends Service {
                 @Override
                 public void run() {
                     try {
-                        // Wait for system and adbd to be ready
                         Thread.sleep(1500);
                         Log.i(TAG, "Applying restored PQ to hardware: b=" + b + ", c=" + c + ", s=" + s + ", h=" + h + ", d=" + d + ", cm=" + cm);
                         if (b != 0) AdbClient.setBrightness(b);
@@ -88,8 +87,6 @@ public class ZoomService extends Service {
             Log.e(TAG, "Failed to read prefs: " + e.getMessage());
         }
     }
-
-
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -117,17 +114,14 @@ public class ZoomService extends Service {
         return null;
     }
 
-    // ========== Foreground Service (API 16-25 compatible) ==========
+    // ========== Foreground Service ==========
 
-    @SuppressWarnings("deprecation")
     private void startAsForeground() {
         try {
-            // API 16-25: use Notification.Builder without channel
-            // PRIORITY_MIN = -2: completely silent, no visual intrusion
             Notification notification = new Notification.Builder(this)
-                    .setContentTitle("T1 Zoom")
-                    .setContentText("Port " + PORT)
-                    .setSmallIcon(android.R.drawable.ic_menu_crop)
+                    .setContentTitle("T1 画面缩放助手")
+                    .setContentText("无线遥控服务运行中 (端口: " + PORT + ")")
+                    .setSmallIcon(android.R.drawable.ic_media_play)
                     .setPriority(Notification.PRIORITY_MIN)
                     .setOngoing(true)
                     .build();
@@ -139,7 +133,7 @@ public class ZoomService extends Service {
         }
     }
 
-    // ========== Screen On Receiver (dynamic) ==========
+    // ========== Screen On Receiver ==========
 
     private void registerScreenOnReceiver() {
         try {
@@ -215,22 +209,37 @@ public class ZoomService extends Service {
                         String valStr = path.substring(path.indexOf("val=") + 4);
                         try {
                             int val = Integer.parseInt(valStr);
-                            AdbClient.setZoom(val);
-                            if (val > 100) {
-                                syncKodiViewMode(val);
+                            String res = AdbClient.setZoom(val);
+                            if (res.startsWith("OK")) {
+                                if (val > 100) {
+                                    syncKodiViewMode(val);
+                                }
+                                sendJson(out, "{\"status\":\"ok\",\"zoom\":" + val + ",\"msg\":\"" + escapeJson(res) + "\"}");
+                            } else {
+                                sendJson(out, "{\"status\":\"error\",\"msg\":\"" + escapeJson(res) + "\"}");
                             }
-                            sendJson(out, "{\"status\":\"ok\",\"zoom\":" + val + "}");
                         } catch (Exception e) {
-                            sendJson(out, "{\"status\":\"error\",\"msg\":\"" + e.getMessage() + "\"}");
+                            sendJson(out, "{\"status\":\"error\",\"msg\":\"" + escapeJson(e.getMessage()) + "\"}");
                         }
                     } else if (path.startsWith("/api/mode?val=")) {
                         String valStr = path.substring(path.indexOf("val=") + 4);
                         try {
                             int val = Integer.parseInt(valStr);
-                            AdbClient.setScreenMode(val);
-                            sendJson(out, "{\"status\":\"ok\",\"mode\":" + val + "}");
+                            String res = AdbClient.setScreenMode(val);
+                            if (res.startsWith("OK")) {
+                                sendJson(out, "{\"status\":\"ok\",\"mode\":" + val + "}");
+                            } else {
+                                sendJson(out, "{\"status\":\"error\",\"msg\":\"" + escapeJson(res) + "\"}");
+                            }
                         } catch (Exception e) {
-                            sendJson(out, "{\"status\":\"error\",\"msg\":\"" + e.getMessage() + "\"}");
+                            sendJson(out, "{\"status\":\"error\",\"msg\":\"" + escapeJson(e.getMessage()) + "\"}");
+                        }
+                    } else if (path.startsWith("/api/diagnose")) {
+                        try {
+                            String json = AdbClient.runDiagnosticJson();
+                            sendJson(out, json);
+                        } catch (Exception e) {
+                            sendJson(out, "{\"status\":\"error\",\"msg\":\"" + escapeJson(e.getMessage()) + "\"}");
                         }
                     } else if (path.startsWith("/api/pq?")) {
                         String type = getParam(path, "type");
@@ -295,7 +304,7 @@ public class ZoomService extends Service {
                             }
 
                         } catch (Exception e) {
-                            sendJson(out, "{\"status\":\"error\",\"msg\":\"" + e.getMessage() + "\"}");
+                            sendJson(out, "{\"status\":\"error\",\"msg\":\"" + escapeJson(e.getMessage()) + "\"}");
                         }
                     } else if (path.startsWith("/api/reset")) {
                         AdbClient.resetAll();
@@ -332,6 +341,15 @@ public class ZoomService extends Service {
         return path.substring(start, end);
     }
 
+    private static String escapeJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
+    }
+
     // ========== Kodi JSON-RPC Integration ==========
 
     private void syncKodiViewMode(int zoomLevel) {
@@ -359,7 +377,7 @@ public class ZoomService extends Service {
                         Log.i(TAG, "Kodi RPC response: " + new String(buf, 0, n, "UTF-8"));
                     }
                 } catch (Exception e) {
-                    Log.d(TAG, "Kodi RPC skipped: " + e.getMessage());
+                    Log.w(TAG, "Kodi RPC sync skipped (not running or 9090 disabled): " + e.getMessage());
                 } finally {
                     if (kodiSock != null) {
                         try { kodiSock.close(); } catch (Exception ignored) {}
@@ -368,8 +386,6 @@ public class ZoomService extends Service {
             }
         }).start();
     }
-
-    // ========== HTTP Response Helpers ==========
 
     private void sendJson(OutputStream out, String json) throws Exception {
         byte[] bytes = json.getBytes("UTF-8");
@@ -402,11 +418,10 @@ public class ZoomService extends Service {
         sb.append("<style>");
         sb.append("* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }");
         sb.append("body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b1329; color: #f8fafc; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 20px 14px 40px; }");
-        sb.append(".header { text-align: center; margin-bottom: 20px; }");
+        sb.append(".header { text-align: center; margin-bottom: 16px; }");
         sb.append(".title { font-size: 21px; font-weight: 700; color: #38bdf8; }");
         sb.append(".subtitle { font-size: 12px; color: #94a3b8; margin-top: 4px; }");
-        sb.append(".status { text-align: center; font-size: 12px; color: #22c55e; margin-top: 6px; font-weight: 500; }");
-        sb.append(".card { background: #1e293b; border-radius: 18px; padding: 18px; width: 100%; max-width: 400px; border: 1px solid #334155; margin-bottom: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }");
+        sb.append(".card { background: #1e293b; border-radius: 18px; padding: 18px; width: 100%; max-width: 420px; border: 1px solid #334155; margin-bottom: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }");
         sb.append(".section-title { font-size: 14px; font-weight: 700; color: #38bdf8; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; padding-bottom: 8px; }");
         sb.append(".pq-item { margin-bottom: 16px; }");
         sb.append(".pq-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }");
@@ -435,37 +450,45 @@ public class ZoomService extends Service {
         sb.append(".toast { position: fixed; bottom: 25px; background: rgba(15, 23, 42, 0.95); color: #38bdf8; border: 1px solid #38bdf8; padding: 9px 18px; border-radius: 25px; font-size: 13px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity 0.2s ease; z-index: 999; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }");
         sb.append(".toast.show { opacity: 1; }");
         sb.append("</style></head><body>");
-        sb.append("<div class=\"header\"><div class=\"title\">🎬 斐讯 T1 影音画质控制</div><div class=\"subtitle\">晶晨 S912 硬件级零损耗缩放与色彩微调</div><div class=\"status\">🟢 硬件引擎已就绪 · 💾 开机自动记忆已启用</div></div>");
+        sb.append("<div class=\"header\"><div class=\"title\">🎬 斐讯 T1 影音画质控制中心</div><div class=\"subtitle\">晶晨 S912 硬件级零损耗缩放与色彩微调 (v3.1 诊断增强版)</div></div>");
 
-        // Card 1: Picture Quality (Brightness, Contrast, Saturation, DNLP)
+        // Card 0: System Doctor
+        sb.append("<div class=\"card\" style=\"border:1px solid #0284c7;\">");
+        sb.append("<div class=\"section-title\"><span>🔍 系统与环境深度诊断 (Doctor)</span><button class=\"btn-rst\" style=\"background:#0284c7;color:#fff;border-color:#38bdf8;padding:4px 10px;font-size:12px;\" onclick=\"runDiag()\">开始体检</button></div>");
+        sb.append("<div id=\"diag-summary\" style=\"font-size:12px;color:#94a3b8;line-height:1.6;\">点击【开始体检】可探测 Root 提权通道、底层硬件节点、Seccomp 硬解补丁、视频硬解流及 Kodi 端口状态。</div>");
+        sb.append("<div id=\"diag-details\" style=\"display:none;margin-top:10px;font-size:11px;line-height:1.5;background:#0f172a;padding:10px;border-radius:10px;border:1px solid #334155;white-space:pre-wrap;font-family:monospace;color:#cbd5e1;max-height:220px;overflow-y:auto;\"></div>");
+        sb.append("<button id=\"btn-copy-diag\" class=\"btn-reset-pq\" style=\"display:none;margin-top:10px;background:#0369a1;color:#fff;font-size:12px;\" onclick=\"copyDiag()\">📋 复制完整诊断报告发给客服</button>");
+        sb.append("</div>");
+
+        // Card 1: Picture Quality
         sb.append("<div class=\"card\"><div class=\"section-title\"><span>🎨 画面色彩与画质微调</span><span style=\"font-size:11px;font-weight:normal;color:#38bdf8;\">💾 自动记忆保存</span></div>");
 
         sb.append("<div style=\"background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.25);border-radius:10px;padding:9px 12px;margin-bottom:14px;font-size:11px;color:#94a3b8;line-height:1.5;\">");
-        sb.append("<strong style=\"color:#38bdf8;\">💡 生效提示：</strong>画质、对比度与动态对比度(DNLP)由芯片 <strong>VPP 硬件层</strong>直接渲染，在<strong>播放电影/视频时（如 Kodi、影视仓、播放器）</strong>即时生效（不影响安卓桌面静态 UI）。");
+        sb.append("<strong style=\"color:#38bdf8;\">💡 生效提示：</strong>画质与缩放由芯片 <strong>VPP 硬件层</strong> 直接渲染，在<strong>播放电影/视频时（如 Kodi、播放器）</strong>即时生效（不影响安卓桌面静态 UI）。");
         sb.append("</div>");
 
         // Brightness Slider
-        sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">☀️ 亮度 (Brightness)</span><div class=\"pq-controls\"><span id=\"val-brightness\" class=\"val-badge\">0</span><button class=\"btn-rst\" onclick=\"resetPq('brightness')\">↺ 复位</button></div></div>");
+        sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">☀ 亮度 (Brightness)</span><div class=\"pq-controls\"><span id=\"val-brightness\" class=\"val-badge\">0</span><button class=\"btn-rst\" onclick=\"resetPq('brightness')\">↺ 复位</button></div></div>");
         sb.append("<input type=\"range\" id=\"range-brightness\" min=\"-100\" max=\"100\" value=\"0\" step=\"1\" oninput=\"onSlide('brightness', this.value)\">");
         sb.append("<div class=\"range-labels\"><span>-100 (极暗)</span><span>0 (默认)</span><span>+100 (极亮)</span></div></div>");
 
         // Contrast Slider
         sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">🌗 对比度 (Contrast)</span><div class=\"pq-controls\"><span id=\"val-contrast\" class=\"val-badge\">0</span><button class=\"btn-rst\" onclick=\"resetPq('contrast')\">↺ 复位</button></div></div>");
         sb.append("<input type=\"range\" id=\"range-contrast\" min=\"-100\" max=\"100\" value=\"0\" step=\"1\" oninput=\"onSlide('contrast', this.value)\">");
-        sb.append("<div class=\"range-labels\"><span>-100 (柔和/低反差)</span><span>0 (默认)</span><span>+100 (高反差/通透)</span></div></div>");
+        sb.append("<div class=\"range-labels\"><span>-100 (低对比)</span><span>0 (默认)</span><span>+100 (超高对比)</span></div></div>");
 
         // Saturation Slider
         sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">🌈 色彩饱和度 (Color)</span><div class=\"pq-controls\"><span id=\"val-saturation\" class=\"val-badge\">0</span><button class=\"btn-rst\" onclick=\"resetPq('saturation')\">↺ 复位</button></div></div>");
         sb.append("<input type=\"range\" id=\"range-saturation\" min=\"-100\" max=\"100\" value=\"0\" step=\"1\" oninput=\"onSlide('saturation', this.value)\">");
-        sb.append("<div class=\"range-labels\"><span>-100 (纯黑白)</span><span>0 (默认)</span><span>+100 (鲜艳浓郁)</span></div></div>");
+        sb.append("<div class=\"range-labels\"><span>-100 (黑白无色)</span><span>0 (默认)</span><span>+100 (高浓艳)</span></div></div>");
 
-        // Skin Tone / Hue Slider
-        sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">👤 肤色冷暖微调 (Hue / 色相)</span><div class=\"pq-controls\"><span id=\"val-hue\" class=\"val-badge\">0</span><button class=\"btn-rst\" onclick=\"resetPq('hue')\">↺ 复位</button></div></div>");
+        // Hue / Skin Tone Slider
+        sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">🌸 肤色偏向 / 色相 (Hue)</span><div class=\"pq-controls\"><span id=\"val-hue\" class=\"val-badge\">0</span><button class=\"btn-rst\" onclick=\"resetPq('hue')\">↺ 复位</button></div></div>");
         sb.append("<input type=\"range\" id=\"range-hue\" min=\"-50\" max=\"50\" value=\"0\" step=\"1\" oninput=\"onSlide('hue', this.value)\">");
         sb.append("<div class=\"range-labels\"><span>-50 (红润/暖肤色)</span><span>0 (标准)</span><span>+50 (偏冷/青绿)</span></div></div>");
 
         // DNLP toggle
-        sb.append("<button id=\"btn-dnlp\" class=\"btn-dnlp\" onclick=\"toggleDnlp()\"><span>✨ 硬件动态对比度 (DNLP 智能去灰)</span><span id=\"dnlp-txt\" class=\"status-tag\">已关闭</span></button>");
+        sb.append("<button id=\"btn-dnlp\" class=\"btn-dnlp\" onclick=\"toggleDnlp()\"><span>⚡ 硬件动态对比度 (DNLP 智能去灰)</span><span id=\"dnlp-txt\" class=\"status-tag\">已关闭</span></button>");
 
         // CM Color Management toggle
         sb.append("<button id=\"btn-cm\" class=\"btn-dnlp\" onclick=\"toggleCm()\" style=\"margin-top:8px;\"><span>🎭 CM2 硬件色彩管理 (智能肤色保护)</span><span id=\"cm-txt\" class=\"status-tag\">已关闭</span></button>");
@@ -475,7 +498,7 @@ public class ZoomService extends Service {
         sb.append("</div>");
 
         // Card 2: Zoom
-        sb.append("<div class=\"card\"><div class=\"section-title\"><span>✨ 硬件数字变焦 (无损切黑边)</span></div>");
+        sb.append("<div class=\"card\"><div class=\"section-title\"><span>🔍 硬件数字变焦 (无损切黑边)</span></div>");
         sb.append("<div class=\"btn-grid-3\">");
         sb.append("<button class=\"zoom-btn\" onclick=\"setZ(115)\">115%<span class=\"sub\">轻微变焦</span></button>");
         sb.append("<button class=\"zoom-btn active\" onclick=\"setZ(125)\">125%<span class=\"sub\">2.35:1 铺满</span></button>");
@@ -485,8 +508,8 @@ public class ZoomService extends Service {
         // Card 3: Screen Mode
         sb.append("<div class=\"card\"><div class=\"section-title\"><span>📺 画面拉伸模式</span></div>");
         sb.append("<div class=\"btn-grid\">");
-        sb.append("<button class=\"zoom-btn\" onclick=\"setM(1)\">全屏强制拉伸<span class=\"sub\">填满消除黑边</span></button>");
-        sb.append("<button class=\"zoom-btn\" onclick=\"setM(4)\">智能非线性拉伸<span class=\"sub\">人物防变形</span></button>");
+        sb.append("<button id=\"btn-mode-1\" class=\"zoom-btn mode-btn\" onclick=\"setM(1)\">全屏强制拉伸<span class=\"sub\">填满消除黑边</span></button>");
+        sb.append("<button id=\"btn-mode-4\" class=\"zoom-btn mode-btn\" onclick=\"setM(4)\">智能非线性拉伸<span class=\"sub\">人物防变形</span></button>");
         sb.append("</div></div>");
 
         // Card 4: Reset Zoom
@@ -499,14 +522,22 @@ public class ZoomService extends Service {
         sb.append("<script>");
         sb.append("let dnlpVal = 0;");
         sb.append("let cmVal = 0;");
+        sb.append("let currentDiagReport = '';");
         sb.append("const timers = {};");
-        sb.append("function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1400);}");
+        sb.append("function toast(msg, isErr){");
+        sb.append("  const t=document.getElementById('toast');");
+        sb.append("  t.textContent=msg;");
+        sb.append("  if(isErr){ t.style.borderColor='#ef4444'; t.style.color='#fca5a5'; }");
+        sb.append("  else { t.style.borderColor='#38bdf8'; t.style.color='#38bdf8'; }");
+        sb.append("  t.classList.add('show');");
+        sb.append("  setTimeout(()=>t.classList.remove('show'),2200);");
+        sb.append("}");
         sb.append("function fmtVal(v){const n=parseInt(v);return n>0?('+'+n):(''+n);}");
         sb.append("function onSlide(type, val){");
         sb.append("  document.getElementById('val-'+type).textContent=fmtVal(val);");
         sb.append("  clearTimeout(timers[type]);");
         sb.append("  timers[type]=setTimeout(()=>{");
-        sb.append("    fetch('/api/pq?type='+type+'&val='+val).then(r=>r.json()).then(d=>toast(getName(type)+' 已设为 '+fmtVal(val))).catch(e=>toast('设置失败'));");
+        sb.append("    fetch('/api/pq?type='+type+'&val='+val).then(r=>r.json()).then(d=>toast(getName(type)+' 已设为 '+fmtVal(val))).catch(e=>toast('设置失败', true));");
         sb.append("  }, 60);");
         sb.append("}");
         sb.append("function getName(t){if(t==='brightness')return '亮度';if(t==='contrast')return '对比度';if(t==='saturation')return '色彩';if(t==='hue')return '肤色/色相';return t;}");
@@ -516,11 +547,11 @@ public class ZoomService extends Service {
         sb.append("  if(type==='saturation'||type==='all'){document.getElementById('range-saturation').value=0;document.getElementById('val-saturation').textContent='0';}");
         sb.append("  if(type==='hue'||type==='all'){document.getElementById('range-hue').value=0;document.getElementById('val-hue').textContent='0';}");
         sb.append("  if(type==='all'){setDnlpUI(0);setCmUI(0);}");
-        sb.append("  fetch('/api/pq?type=reset&item='+type).then(r=>r.json()).then(d=>toast((type==='all'?'全部画质':getName(type))+' 已复位为 0')).catch(e=>toast('复位失败'));");
+        sb.append("  fetch('/api/pq?type=reset&item='+type).then(r=>r.json()).then(d=>toast((type==='all'?'全部画质':getName(type))+' 已复位为 0')).catch(e=>toast('复位失败', true));");
         sb.append("}");
         sb.append("function toggleDnlp(){");
         sb.append("  const nVal = dnlpVal === 1 ? 0 : 1;");
-        sb.append("  fetch('/api/pq?type=dnlp&val='+nVal).then(r=>r.json()).then(d=>{setDnlpUI(nVal);toast('动态对比度 (DNLP) '+(nVal===1?'已开启':'已关闭'));}).catch(e=>toast('设置失败'));");
+        sb.append("  fetch('/api/pq?type=dnlp&val='+nVal).then(r=>r.json()).then(d=>{setDnlpUI(nVal);toast('动态对比度 (DNLP) '+(nVal===1?'已开启':'已关闭'));}).catch(e=>toast('设置失败', true));");
         sb.append("}");
         sb.append("function setDnlpUI(v){");
         sb.append("  dnlpVal = v;");
@@ -531,7 +562,7 @@ public class ZoomService extends Service {
         sb.append("}");
         sb.append("function toggleCm(){");
         sb.append("  const nVal = cmVal === 1 ? 0 : 1;");
-        sb.append("  fetch('/api/pq?type=cm&val='+nVal).then(r=>r.json()).then(d=>{setCmUI(nVal);toast('CM 色彩与肤色保护 '+(nVal===1?'已开启':'已关闭'));}).catch(e=>toast('设置失败'));");
+        sb.append("  fetch('/api/pq?type=cm&val='+nVal).then(r=>r.json()).then(d=>{setCmUI(nVal);toast('CM 色彩与肤色保护 '+(nVal===1?'已开启':'已关闭'));}).catch(e=>toast('设置失败', true));");
         sb.append("}");
         sb.append("function setCmUI(v){");
         sb.append("  cmVal = v;");
@@ -540,9 +571,59 @@ public class ZoomService extends Service {
         sb.append("  if(v===1){btn.classList.add('active');txt.textContent='已开启 (保护肤色)';txt.style.background='#22c55e';txt.style.color='#000';}");
         sb.append("  else{btn.classList.remove('active');txt.textContent='已关闭';txt.style.background='rgba(0,0,0,0.3)';txt.style.color='#cbd5e1';}");
         sb.append("}");
-        sb.append("function setZ(v){fetch('/api/zoom?val='+v).then(r=>r.json()).then(d=>toast('已变焦至 '+v+'% (切除黑边)')).catch(e=>toast('设置失败'));}");
-        sb.append("function setM(v){fetch('/api/mode?val='+v).then(r=>r.json()).then(d=>toast('已切换屏幕模式 '+v)).catch(e=>toast('设置失败'));}");
-        sb.append("function resetA(){fetch('/api/reset').then(r=>r.json()).then(d=>toast('已恢复 100% 原始比例')).catch(e=>toast('重置失败'));}");
+        sb.append("function setZ(v){fetch('/api/zoom?val='+v).then(r=>r.json()).then(d=>{if(d.status==='ok')toast('已变焦至 '+v+'% (切除黑边)');else toast('变焦失败: '+d.msg, true);}).catch(e=>toast('设置失败', true));}");
+        sb.append("function setM(v){");
+        sb.append("  const name = v === 1 ? '全屏强制拉伸 (消除黑边)' : (v === 4 ? '智能非线性拉伸 (人物防变形)' : ('屏幕模式 ' + v));");
+        sb.append("  fetch('/api/mode?val='+v).then(r=>r.json()).then(d=>{");
+        sb.append("    if(d.status==='ok'){");
+        sb.append("      document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));");
+        sb.append("      const b=document.getElementById('btn-mode-'+v); if(b) b.classList.add('active');");
+        sb.append("      toast('已切换为 '+name);");
+        sb.append("    } else toast('模式失败: '+d.msg, true);");
+        sb.append("  }).catch(e=>toast('设置失败', true));");
+        sb.append("}");
+        sb.append("function resetA(){");
+        sb.append("  fetch('/api/reset').then(r=>r.json()).then(d=>{");
+        sb.append("    document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));");
+        sb.append("    toast('已恢复 100% 原始比例');");
+        sb.append("  }).catch(e=>toast('重置失败', true));");
+        sb.append("}");
+        sb.append("function runDiag(){");
+        sb.append("  const sum=document.getElementById('diag-summary');");
+        sb.append("  const det=document.getElementById('diag-details');");
+        sb.append("  const btnCopy=document.getElementById('btn-copy-diag');");
+        sb.append("  sum.innerHTML='⏳ 正在全面探测盒子底层环境，请稍候...';");
+        sb.append("  fetch('/api/diagnose').then(r=>r.json()).then(d=>{");
+        sb.append("    let html='<strong>【体检总结】</strong> '+(d.rootOk&&d.seccompPatched?'<span style=\"color:#22c55e;\">核心环境正常</span>':'<span style=\"color:#ef4444;\">发现异常项</span>')+'<br>';");
+        sb.append("    html+='• 提权通道: <span style=\"color:#38bdf8;\">'+d.rootChannel+'</span><br>';");
+        sb.append("    html+='• ADB 端口: '+(d.adbPortOpen?'<span style=\"color:#22c55e;\">5555端口通畅</span>':'<span style=\"color:#f59e0b;\">未开启/拒绝</span>')+'<br>';");
+        sb.append("    html+='• Seccomp 补丁: '+(d.seccompPatched?'<span style=\"color:#22c55e;\">'+d.seccompInfo+'</span>':'<span style=\"color:#ef4444;\">'+d.seccompInfo+'</span>')+'<br>';");
+        sb.append("    html+='• Zoom节点写入: '+(d.zoomWritable?'<span style=\"color:#22c55e;\">读写正常 (当前='+d.zoomVal+')</span>':'<span style=\"color:#ef4444;\">写入测试失败</span>')+'<br>';");
+        sb.append("    html+='• 视频硬解流: '+(d.videoPlaying?'<span style=\"color:#22c55e;\">正在播放中 (已检测到硬件流)</span>':'<span style=\"color:#f59e0b;\">未播放硬解视频 (桌面不缩放)</span>')+'<br>';");
+        sb.append("    html+='• Kodi 9090端口: '+(d.kodiRpcOk?'<span style=\"color:#22c55e;\">畅通</span>':'<span style=\"color:#94a3b8;\">未联通</span>');");
+        sb.append("    sum.innerHTML=html;");
+        sb.append("    currentDiagReport=d.reportText;");
+        sb.append("    det.textContent=d.reportText;");
+        sb.append("    det.style.display='block';");
+        sb.append("    btnCopy.style.display='block';");
+        sb.append("    toast('体检完成');");
+        sb.append("  }).catch(e=>{ sum.innerHTML='<span style=\"color:#ef4444;\">体检请求失败: '+e+'</span>'; });");
+        sb.append("}");
+        sb.append("function copyDiag(){");
+        sb.append("  if(!currentDiagReport)return;");
+        sb.append("  if(navigator.clipboard&&navigator.clipboard.writeText){");
+        sb.append("    navigator.clipboard.writeText(currentDiagReport).then(()=>toast('已复制体检报告')).catch(()=>fbCopy());");
+        sb.append("  }else{ fbCopy(); }");
+        sb.append("}");
+        sb.append("function fbCopy(){");
+        sb.append("  const ta=document.createElement('textarea');");
+        sb.append("  ta.value=currentDiagReport;");
+        sb.append("  document.body.appendChild(ta);");
+        sb.append("  ta.select();");
+        sb.append("  document.execCommand('copy');");
+        sb.append("  document.body.removeChild(ta);");
+        sb.append("  toast('已复制体检报告');");
+        sb.append("}");
         sb.append("window.addEventListener('DOMContentLoaded',()=>{");
         sb.append("  fetch('/api/status').then(r=>r.json()).then(d=>{");
         sb.append("    if(d.brightness!==undefined){document.getElementById('range-brightness').value=d.brightness;document.getElementById('val-brightness').textContent=fmtVal(d.brightness);}");
@@ -557,4 +638,3 @@ public class ZoomService extends Service {
         return sb.toString();
     }
 }
-

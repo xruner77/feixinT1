@@ -13,6 +13,7 @@ build/
 dist/
 *.spec
 T1_Adaptive_Seccomp_Patcher/
+斐讯T1_全固件自适应硬解修复与环境诊断工具包/
 
 # Large third-party APKs
 *.apk

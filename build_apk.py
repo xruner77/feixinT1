@@ -74,9 +74,6 @@ def build_and_deploy(target_ip="192.168.123.98"):
     javac_cmd = ["javac", "-encoding", "UTF-8", "-source", "1.8", "-target", "1.8", "-cp", ANDROID_JAR, "-d", CLASSES_DIR] + java_files
     run_cmd(javac_cmd, "Compile Java files")
 
-
-
-
     # 5. d8 dex
     class_files = []
     for root, dirs, files in os.walk(CLASSES_DIR):
@@ -91,7 +88,6 @@ def build_and_deploy(target_ip="192.168.123.98"):
     unaligned_apk = os.path.join(BASE_DIR, "unaligned.apk")
     shutil.copyfile(res_apk, unaligned_apk)
 
-    # jar uf unaligned.apk classes.dex
     jar_cmd = ["jar", "uf", unaligned_apk, "-C", BIN_DIR, "classes.dex"]
     run_cmd(jar_cmd, "Add classes.dex to APK")
 
@@ -106,18 +102,30 @@ def build_and_deploy(target_ip="192.168.123.98"):
 
     out_apk = r"d:\tools\adb\T1ZoomHelper.apk"
     shutil.copyfile(unaligned_apk, out_apk)
+    print(f"\n==================================================")
     print(f"*** Build successful: {out_apk} ***")
+    print(f"==================================================\n")
 
     # 8. Deploy
+    if "--no-deploy" in sys.argv:
+        print("[*] Skipped deployment (--no-deploy specified).")
+        return
+
     if target_ip:
-        print(f"Deploying to {target_ip}:5555...")
-        subprocess.run([ADB, "connect", f"{target_ip}:5555"], capture_output=True)
-        res = subprocess.run([ADB, "-s", f"{target_ip}:5555", "install", "-r", out_apk], capture_output=True, text=True)
-        print("Install output:", res.stdout, res.stderr)
-        
-        # Start activity
-        subprocess.run([ADB, "-s", f"{target_ip}:5555", "shell", "am start -n com.phicomm.t1zoom/.MainActivity"], capture_output=True)
-        print("Service restarted.")
+        print(f"Checking target device {target_ip}:5555...")
+        try:
+            subprocess.run([ADB, "connect", f"{target_ip}:5555"], capture_output=True, timeout=2)
+            dev_res = subprocess.run([ADB, "devices"], capture_output=True, text=True, timeout=2)
+            if target_ip in dev_res.stdout and "device" in dev_res.stdout:
+                print(f"Deploying to {target_ip}:5555...")
+                res = subprocess.run([ADB, "-s", f"{target_ip}:5555", "install", "-r", out_apk], capture_output=True, text=True, timeout=10)
+                print("Install output:", res.stdout.strip(), res.stderr.strip())
+                subprocess.run([ADB, "-s", f"{target_ip}:5555", "shell", "am start -n com.phicomm.t1zoom/.MainActivity"], capture_output=True, timeout=5)
+                print("Service restarted.")
+            else:
+                print(f"[*] 设备 {target_ip} 未连接或离线，跳过自动推送。APK 已就绪：{out_apk}")
+        except Exception as e:
+            print(f"[*] 设备连接超时或未响应，跳过自动推送：{e}")
 
 if __name__ == '__main__':
     build_and_deploy()

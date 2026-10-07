@@ -3,64 +3,93 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:gravity="center"
+    android:gravity="center_horizontal"
     android:background="#0f172a"
-    android:padding="32dp">
+    android:padding="20dp">
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="斐讯 T1 画面缩放助手"
-        android:textSize="32sp"
+        android:text="斐讯 T1 画面缩放与画质助手"
+        android:textSize="26sp"
         android:textColor="#38bdf8"
         android:textStyle="bold"
-        android:layout_marginBottom="16dp" />
+        android:layout_marginBottom="4dp" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="后台无线遥控服务已启动！手机在同一 Wi-Fi 下打开以下网址即可控制："
-        android:textSize="18sp"
+        android:text="后台遥控服务运行中，同一 Wi-Fi 浏览器打开即可无线控制："
+        android:textSize="14sp"
         android:textColor="#94a3b8"
-        android:layout_marginBottom="12dp" />
+        android:layout_marginBottom="4dp" />
 
     <TextView
         android:id="@+id/tv_ip"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="http://192.168.123.98:8989"
-        android:textSize="28sp"
+        android:textSize="22sp"
         android:textColor="#facc15"
         android:textStyle="bold"
-        android:layout_marginBottom="32dp" />
+        android:layout_marginBottom="12dp" />
 
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:layout_marginBottom="12dp">
 
         <Button
             android:id="@+id/btn_zoom_125"
-            android:layout_width="200dp"
-            android:layout_height="60dp"
+            android:layout_width="150dp"
+            android:layout_height="52dp"
             android:text="125% 铺满幕布"
-            android:textSize="18sp"
-            android:layout_marginRight="16dp" />
+            android:textSize="15sp"
+            android:layout_marginRight="10dp" />
 
         <Button
             android:id="@+id/btn_smart_stretch"
-            android:layout_width="200dp"
-            android:layout_height="60dp"
+            android:layout_width="150dp"
+            android:layout_height="52dp"
             android:text="智能非线性拉伸"
-            android:textSize="18sp"
-            android:layout_marginRight="16dp" />
+            android:textSize="15sp"
+            android:layout_marginRight="10dp" />
 
         <Button
             android:id="@+id/btn_reset"
-            android:layout_width="200dp"
-            android:layout_height="60dp"
+            android:layout_width="150dp"
+            android:layout_height="52dp"
             android:text="恢复 100% 原始"
-            android:textSize="18sp" />
+            android:textSize="15sp"
+            android:layout_marginRight="10dp" />
+
+        <Button
+            android:id="@+id/btn_diagnose"
+            android:layout_width="160dp"
+            android:layout_height="52dp"
+            android:text="🔍 一键环境诊断"
+            android:textSize="15sp"
+            android:background="#0284c7"
+            android:textColor="#ffffff" />
     </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#1e293b"
+        android:padding="12dp">
+
+        <TextView
+            android:id="@+id/tv_diag_result"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="【系统体检】点击上方【🔍 一键环境诊断】按钮，即可全面探测盒子 Root 权限通道、底层硬件节点、Seccomp 补丁、视频播放流状态及 Kodi 联动端口。"
+            android:textColor="#cbd5e1"
+            android:textSize="13sp"
+            android:typeface="monospace"
+            android:lineSpacingExtra="3dp" />
+    </ScrollView>
 
 </LinearLayout>

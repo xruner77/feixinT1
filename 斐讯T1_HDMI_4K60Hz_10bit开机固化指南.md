@@ -301,7 +301,15 @@ adb shell "echo 31183118 | su 0 sh -c 'echo 0 0 0 0 > /sys/class/video/crop'"
 > 系统已通过底层将 Kodi 的 `guisettings.xml` 中的全局默认设置从 `4`（拉伸）恢复为 `0`（正常 Normal），以后打开任何视频均默认保真比例开播，不会再出现“默认拉伸畸变”的现象。
 
 #### 方式 2：通过 Kodi 本地 JSON-RPC 接口远程程控
-Kodi 在本地回环 `127.0.0.1:9090` 常驻开启了 JSON-RPC 接口，可以通过发送标准指令直接控制播放器视窗几何属性：
+
+> [!IMPORTANT]
+> **前提条件（在电视端 Kodi 中开启远程控制）**：  
+> Kodi 默认未开启外部应用程序远程控制端口，需在电视端使用遥控器开启一次（仅需设置一次）：  
+> 1. 进入 Kodi **【系统设置】 -> 【服务设置】 -> 【控制】** (Settings -> Services -> Control)；  
+> 2. 打开 **【允许通过 HTTP 进行远程控制】** (Allow remote control via HTTP，默认端口 8080)；  
+> 3. 打开 **【允许来自其他系统的应用程序远程控制】** (Allow remote control by applications on other systems，开启 9090 TCP 端口)。  
+> 开启后，Kodi 即在本地回环 `127.0.0.1:9090` 常驻开启 JSON-RPC 接口，可以通过发送标准指令直接控制播放器视窗几何属性：
+
 ```bash
 # 一键切换为【缩放 Zoom】模式（解除黑边视窗锁定，推荐！）
 echo '{"jsonrpc": "2.0", "method": "Player.SetViewMode", "params": {"viewmode": "zoom"}, "id": 1}' | nc 127.0.0.1 9090
