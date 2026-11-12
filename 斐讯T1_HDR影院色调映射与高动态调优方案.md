@@ -45,7 +45,7 @@
 | **`/sys/class/amhdmitx/amhdmitx0/config`** | `cd = 5` (10-bit) | **4K 60Hz 10-bit 色深真实输出**，消除色彩断层（Banding） |
 | **`/sys/module/am_vecm/parameters/hdr_mode`** | `1` | 强制走盒子端高质量色调映射，接管投影仪粗糙算法 |
 | **`/sys/module/am_vecm/parameters/range_control`** | `0` (Auto) | 解除纯白天花板钳制，允许白色信号 100% 冲顶至 1023 |
-| **`/sys/class/video/contrast`** | `50` | 视频层硬件对比度大幅拉升至 50，黑白立体感极其强烈 |
+| **`/sys/class/video/contrast`** | `35` | 视频层硬件对比度调节至 35，黑白层次分明且过渡自然 |
 | **`/sys/module/am_vecm/parameters/video_eotf_coeff`** | `2760,-507,0,-95,2347,0,-44,-177,2474,1` | **1.10x EOTF 光学矩阵增益**，高光白位通透穿透 |
 | **`/sys/module/am_vecm/parameters/knee_setting`** | *(见下文 35 点数组)* | **Ultra Punch 陡峭高光曲线**：暗部深邃不浮灰，高光爆发 |
 | **`/sys/module/am_vecm/parameters/knee_factor`** | `256` | 100% 激活定制曲线 |
@@ -78,7 +78,7 @@ powershell -Command "echo '31183118`nsetenforce 0`necho 420,10bit > /sys/class/a
 powershell -Command "echo '31183118`necho 2160p60hz420 > /sys/class/display/mode`nexit' | .\adb.exe -s 192.168.123.98:5555 shell su 1000"
 
 # 2. 注入 Ultra Punch 曲线与高动态对比度 50
-powershell -Command "echo '31183118`necho 1 > /sys/module/am_vecm/parameters/hdr_mode`necho 0,16,46,76,107,137,168,198,228,306,388,444,489,529,565,599,630,660,688,714,740,765,789,812,834,856,877,898,919,938,958,977,996,1014,1023 > /sys/module/am_vecm/parameters/knee_setting`necho 1 > /sys/module/am_vecm/parameters/knee_interpolation_mode`necho 256 > /sys/module/am_vecm/parameters/knee_factor`necho 0 > /sys/module/am_vecm/parameters/range_control`necho 50 > /sys/module/am_vecm/parameters/sdr_saturation_offset`necho 0x1 > /sys/class/amvecm/dnlp`necho 1 > /sys/module/am_vecm/parameters/dnlp_en`necho 1 > /sys/module/am_vecm/parameters/dnlp_en_2`necho 8 > /sys/module/am_vecm/parameters/dnlp_adj_level`necho 8 > /sys/module/am_vecm/parameters/ve_dnlp_adj_level`necho 255 > /sys/module/am_vecm/parameters/ve_dnlp_strength`necho 16 > /sys/module/am_vecm/parameters/ve_dnlp_whtext`necho 1 > /sys/module/am_vecm/parameters/ve_dnlp_set_wext`necho blk_ext_en > /sys/class/amvecm/pq_user_set`necho 2760,-507,0,-95,2347,0,-44,-177,2474,1 > /sys/module/am_vecm/parameters/video_eotf_coeff`necho 1 > /sys/module/am_vecm/parameters/reload_lut`necho 1 > /sys/module/am_vecm/parameters/reload_mtx`necho 50 > /sys/class/video/contrast`nexit' | .\adb.exe -s 192.168.123.98:5555 shell su"
+powershell -Command "echo '31183118`necho 1 > /sys/module/am_vecm/parameters/hdr_mode`necho 0,16,46,76,107,137,168,198,228,306,388,444,489,529,565,599,630,660,688,714,740,765,789,812,834,856,877,898,919,938,958,977,996,1014,1023 > /sys/module/am_vecm/parameters/knee_setting`necho 1 > /sys/module/am_vecm/parameters/knee_interpolation_mode`necho 256 > /sys/module/am_vecm/parameters/knee_factor`necho 0 > /sys/module/am_vecm/parameters/range_control`necho 50 > /sys/module/am_vecm/parameters/sdr_saturation_offset`necho 0x1 > /sys/class/amvecm/dnlp`necho 1 > /sys/module/am_vecm/parameters/dnlp_en`necho 1 > /sys/module/am_vecm/parameters/dnlp_en_2`necho 8 > /sys/module/am_vecm/parameters/dnlp_adj_level`necho 8 > /sys/module/am_vecm/parameters/ve_dnlp_adj_level`necho 255 > /sys/module/am_vecm/parameters/ve_dnlp_strength`necho 16 > /sys/module/am_vecm/parameters/ve_dnlp_whtext`necho 1 > /sys/module/am_vecm/parameters/ve_dnlp_set_wext`necho blk_ext_en > /sys/class/amvecm/pq_user_set`necho 2760,-507,0,-95,2347,0,-44,-177,2474,1 > /sys/module/am_vecm/parameters/video_eotf_coeff`necho 1 > /sys/module/am_vecm/parameters/reload_lut`necho 1 > /sys/module/am_vecm/parameters/reload_mtx`necho 35 > /sys/class/video/contrast`nexit' | .\adb.exe -s 192.168.123.98:5555 shell su"
 ```
 
 ---
@@ -129,7 +129,7 @@ public static void applyCinemaToneMapping(boolean enable) {
         sb.append("echo 1 > /sys/module/am_vecm/parameters/reload_lut; ");
         sb.append("echo 1 > /sys/module/am_vecm/parameters/reload_mtx; ");
         // 注意：video/contrast 必须置于最后执行，防止被 amvecm 初始化覆盖
-        sb.append("echo 50 > /sys/class/video/contrast");
+        sb.append("echo 35 > /sys/class/video/contrast");
         
         execute(sb.toString());
     } else {
@@ -145,7 +145,7 @@ public static void applyCinemaToneMapping(boolean enable) {
 3. **Web 端前端（HTTP Server）**：在手机扫码打开的调色盘页面上，增加一个 `【影院高动态映射 (BT.2390)】` 的高保真切换开关（Toggle Switch），支持一键开启/直通对比。
 
 ### 3. 核心踩坑与注意事项（必读）
-- **顺序依赖**：写入 `echo 50 > /sys/class/video/contrast` 必须在 DNLP 与 `amvecm` 指令之后，因为 `amvecm/contrast` 的内部换算会重写 `video/contrast`；
+- **顺序依赖**：写入 `echo 35 > /sys/class/video/contrast` 必须在 DNLP 与 `amvecm` 指令之后，因为 `amvecm/contrast` 的内部换算会重写 `video/contrast`；
 - **刷新必须触发**：修改 `knee_setting` 或 `video_eotf_coeff` 后，必须紧跟 `echo 1 > /sys/module/am_vecm/parameters/reload_lut`，否则参数仅停留在驱动内存，不会被 VPP 硬件 SRAM 采纳；
 - **HDMI 握手防重置**：确保底层 U-Boot ENV 始终固化 `is.bestmode=false` 与 `outputmode=2160p60hz420`，防止热插拔再次触发设置菜单闪退。
 

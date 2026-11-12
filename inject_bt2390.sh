@@ -35,5 +35,5 @@ echo "2760,-507,0,-95,2347,0,-44,-177,2474,1" > /sys/module/am_vecm/parameters/v
 echo 1 > /sys/module/am_vecm/parameters/reload_lut
 echo 1 > /sys/module/am_vecm/parameters/reload_mtx
 
-# 6. 极致反差对比度 50 (最后写入，防止驱动覆盖)
-echo 50 > /sys/class/video/contrast
+# 6. 反差对比度 35 (最后写入，防止驱动覆盖)
+echo 35 > /sys/class/video/contrast

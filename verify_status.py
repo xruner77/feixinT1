@@ -31,7 +31,7 @@ cat /sys/module/am_vecm/parameters/range_control
         print(f"HDMI 色彩深度 (ColorDepth) = {cd_str}")
         print(f"HDMI 属性 (Active Attr)    = {attr}")
         print(f"视频对比度 (Video Contrast)  = {contrast}")
-        print(f"高光放大系数 (EOTF 1.1x)     = {eotf}")
+        print(f"高光放大系数 (EOTF)          = {eotf}")
         print(f"硬件动态对比度 (DNLP sysfs) = {dnlp}")
         print(f"全动态范围 (Range Control)  = {range_ctrl}")
     else:
