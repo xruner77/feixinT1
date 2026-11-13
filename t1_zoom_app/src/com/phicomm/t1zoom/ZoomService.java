@@ -50,11 +50,19 @@ public class ZoomService extends Service {
         try {
             SharedPreferences prefs = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
             final int b = prefs.getInt("brightness", 0);
-            final int c = prefs.getInt("contrast", 0);
+            final int c = prefs.getInt("contrast", 35);
             final int s = prefs.getInt("saturation", 0);
             final int h = prefs.getInt("hue", 0);
-            final int d = prefs.getInt("dnlp", 0);
-            final int cm = prefs.getInt("cm", 0);
+            final int d = prefs.getInt("dnlp", 1);
+            final int cm = prefs.getInt("cm", 1);
+            final int eotf = prefs.getInt("eotf", 110);
+            final int bext = prefs.getInt("bext", 8);
+            final int dither = prefs.getInt("dither", 1);
+            final int nr10 = prefs.getInt("nr10", 1);
+            final int bt2390 = prefs.getInt("bt2390", 1);
+            final int kfactor = prefs.getInt("kfactor", 256);
+            final int sdrsat = prefs.getInt("sdrsat", 50);
+            final int whtext = prefs.getInt("whtext", 16);
 
             // Pre-set in-memory tracking so status API is instantly accurate
             AdbClient.setCurBrightness(b);
@@ -63,21 +71,48 @@ public class ZoomService extends Service {
             AdbClient.setCurHue(h);
             AdbClient.setCurDnlp(d);
             AdbClient.setCurCm(cm);
+            AdbClient.setCurEotf(eotf);
+            AdbClient.setCurBext(bext);
+            AdbClient.setCurDither(dither);
+            AdbClient.setCurNr10(nr10);
+            AdbClient.setCurBt2390(bt2390);
+            AdbClient.setCurKneeFactor(kfactor);
+            AdbClient.setCurSdrSat(sdrsat);
+            AdbClient.setCurWhtext(whtext);
 
             new Thread(new Runnable() {
                 @Override
                 public void run() {
                     try {
                         Thread.sleep(1500);
-                        Log.i(TAG, "Applying restored PQ to hardware: b=" + b + ", c=" + c + ", s=" + s + ", h=" + h + ", d=" + d + ", cm=" + cm);
+                        // 使用应用时刻的最新值（若启动期间用户已在网页调整，以用户为准）
+                        final int b = AdbClient.getCurBrightness(), c = AdbClient.getCurContrast();
+                        final int s = AdbClient.getCurSaturation(), h = AdbClient.getCurHue();
+                        final int d = AdbClient.getCurDnlp(), cm = AdbClient.getCurCm();
+                        final int eotf = AdbClient.getCurEotf(), bext = AdbClient.getCurBext();
+                        final int dither = AdbClient.getCurDither(), nr10 = AdbClient.getCurNr10();
+                        final int bt2390 = AdbClient.getCurBt2390();
+                        final int kf = AdbClient.getCurKneeFactor(), ss = AdbClient.getCurSdrSat();
+                        final int wt = AdbClient.getCurWhtext();
+                        Log.i(TAG, "Applying restored PQ to hardware: b=" + b + ", c=" + c + ", s=" + s + ", h=" + h + ", d=" + d + ", cm=" + cm + ", eotf=" + eotf + ", bext=" + bext + ", kf=" + kf + ", ss=" + ss + ", wt=" + wt);
+                        if (bt2390 == 1) {
+                            AdbClient.setBt2390(1);
+                        } else {
+                            AdbClient.setSdrSat(ss);
+                            AdbClient.setWhtext(wt);
+                        }
                         if (b != 0) AdbClient.setBrightness(b);
-                        if (c != 0) AdbClient.setContrast(c);
+                        AdbClient.setContrast(c);
                         if (s != 0 || h != 0) {
                             AdbClient.setSaturation(s);
                             AdbClient.setHue(h);
                         }
                         if (d != 0) AdbClient.setDnlp(d);
-                        if (cm != 0) AdbClient.setCm(cm);
+                        AdbClient.setCm(cm);
+                        if (eotf != 0) AdbClient.setEotf(eotf);
+                        AdbClient.setBext(bext);
+                        AdbClient.setDither(dither);
+                        AdbClient.setNr10(nr10);
                     } catch (Exception e) {
                         Log.e(TAG, "Error restoring PQ: " + e.getMessage());
                     }
@@ -271,34 +306,77 @@ public class ZoomService extends Service {
                                 sendJson(out, "{\"status\":\"ok\",\"action\":\"reset\",\"item\":\"" + item + "\"}");
                             } else if ("brightness".equals(type) && valStr != null) {
                                 int val = Integer.parseInt(valStr);
-                                AdbClient.setBrightness(val);
+                                String r = AdbClient.setBrightness(val);
                                 savePqPref("brightness", val);
-                                sendJson(out, "{\"status\":\"ok\",\"type\":\"brightness\",\"val\":" + val + "}");
+                                sendPqResult(out, "brightness", val, r);
                             } else if ("contrast".equals(type) && valStr != null) {
                                 int val = Integer.parseInt(valStr);
-                                AdbClient.setContrast(val);
+                                String r = AdbClient.setContrast(val);
                                 savePqPref("contrast", val);
-                                sendJson(out, "{\"status\":\"ok\",\"type\":\"contrast\",\"val\":" + val + "}");
+                                sendPqResult(out, "contrast", val, r);
                             } else if ("saturation".equals(type) && valStr != null) {
                                 int val = Integer.parseInt(valStr);
-                                AdbClient.setSaturation(val);
+                                String r = AdbClient.setSaturation(val);
                                 savePqPref("saturation", val);
-                                sendJson(out, "{\"status\":\"ok\",\"type\":\"saturation\",\"val\":" + val + "}");
+                                sendPqResult(out, "saturation", val, r);
                             } else if ("hue".equals(type) && valStr != null) {
                                 int val = Integer.parseInt(valStr);
-                                AdbClient.setHue(val);
+                                String r = AdbClient.setHue(val);
                                 savePqPref("hue", val);
-                                sendJson(out, "{\"status\":\"ok\",\"type\":\"hue\",\"val\":" + val + "}");
+                                sendPqResult(out, "hue", val, r);
                             } else if ("dnlp".equals(type) && valStr != null) {
                                 int val = Integer.parseInt(valStr);
-                                AdbClient.setDnlp(val);
+                                String r = AdbClient.setDnlp(val);
                                 savePqPref("dnlp", val);
-                                sendJson(out, "{\"status\":\"ok\",\"type\":\"dnlp\",\"val\":" + val + "}");
+                                sendPqResult(out, "dnlp", val, r);
                             } else if ("cm".equals(type) && valStr != null) {
                                 int val = Integer.parseInt(valStr);
-                                AdbClient.setCm(val);
+                                String r = AdbClient.setCm(val);
                                 savePqPref("cm", val);
-                                sendJson(out, "{\"status\":\"ok\",\"type\":\"cm\",\"val\":" + val + "}");
+                                sendPqResult(out, "cm", val, r);
+                            } else if ("eotf".equals(type) && valStr != null) {
+                                int val = Integer.parseInt(valStr);
+                                String r = AdbClient.setEotf(val);
+                                savePqPref("eotf", val);
+                                sendPqResult(out, "eotf", val, r);
+                            } else if ("bext".equals(type) && valStr != null) {
+                                int val = Integer.parseInt(valStr);
+                                String r = AdbClient.setBext(val);
+                                savePqPref("bext", val);
+                                sendPqResult(out, "bext", val, r);
+                            } else if ("dither".equals(type) && valStr != null) {
+                                int val = Integer.parseInt(valStr);
+                                String r = AdbClient.setDither(val);
+                                savePqPref("dither", val);
+                                sendPqResult(out, "dither", val, r);
+                            } else if ("nr10".equals(type) && valStr != null) {
+                                int val = Integer.parseInt(valStr);
+                                String r = AdbClient.setNr10(val);
+                                savePqPref("nr10", val);
+                                sendPqResult(out, "nr10", val, r);
+                            } else if ("bt2390".equals(type) && valStr != null) {
+                                int val = Integer.parseInt(valStr);
+                                String r = AdbClient.setBt2390(val);
+                                savePqPref("bt2390", val);
+                                sendPqResult(out, "bt2390", val, r);
+                            } else if ("kfactor".equals(type) && valStr != null) {
+                                int val = Integer.parseInt(valStr);
+                                String r = AdbClient.setKneeFactor(val);
+                                savePqPref("kfactor", val);
+                                sendPqResult(out, "kfactor", val, r);
+                            } else if ("sdrsat".equals(type) && valStr != null) {
+                                int val = Integer.parseInt(valStr);
+                                String r = AdbClient.setSdrSat(val);
+                                savePqPref("sdrsat", val);
+                                sendPqResult(out, "sdrsat", val, r);
+                            } else if ("whtext".equals(type) && valStr != null) {
+                                int val = Integer.parseInt(valStr);
+                                String r = AdbClient.setWhtext(val);
+                                savePqPref("whtext", val);
+                                sendPqResult(out, "whtext", val, r);
+                            } else if ("10bit".equals(type)) {
+                                AdbClient.ensure10BitColorOutput();
+                                sendJson(out, "{\"status\":\"ok\",\"type\":\"10bit\"}");
                             } else {
                                 sendJson(out, "{\"status\":\"error\",\"msg\":\"invalid params\"}");
                             }
@@ -307,9 +385,13 @@ public class ZoomService extends Service {
                             sendJson(out, "{\"status\":\"error\",\"msg\":\"" + escapeJson(e.getMessage()) + "\"}");
                         }
                     } else if (path.startsWith("/api/reset")) {
-                        AdbClient.resetAll();
+                        String r = AdbClient.resetAll();
                         setKodiViewMode(0);
-                        sendJson(out, "{\"status\":\"ok\",\"action\":\"reset\"}");
+                        if (r != null && r.startsWith("OK")) {
+                            sendJson(out, "{\"status\":\"ok\",\"action\":\"reset\"}");
+                        } else {
+                            sendJson(out, "{\"status\":\"error\",\"msg\":\"" + escapeJson(r) + "\"}");
+                        }
                     } else if (path.startsWith("/api/status")) {
                         sendJson(out, "{\"status\":\"ok\",\"service\":\"running\",\"port\":" + PORT +
                                 ",\"zoom\":" + AdbClient.getCurZoom() +
@@ -319,7 +401,15 @@ public class ZoomService extends Service {
                                 ",\"saturation\":" + AdbClient.getCurSaturation() +
                                 ",\"hue\":" + AdbClient.getCurHue() +
                                 ",\"dnlp\":" + AdbClient.getCurDnlp() +
-                                ",\"cm\":" + AdbClient.getCurCm() + "}");
+                                ",\"cm\":" + AdbClient.getCurCm() +
+                                ",\"eotf\":" + AdbClient.getCurEotf() +
+                                ",\"bext\":" + AdbClient.getCurBext() +
+                                ",\"dither\":" + AdbClient.getCurDither() +
+                                ",\"nr10\":" + AdbClient.getCurNr10() +
+                                ",\"bt2390\":" + AdbClient.getCurBt2390() +
+                                ",\"kfactor\":" + AdbClient.getCurKneeFactor() +
+                                ",\"sdrsat\":" + AdbClient.getCurSdrSat() +
+                                ",\"whtext\":" + AdbClient.getCurWhtext() + "}");
                     } else {
                         // Serve Mobile Remote HTML Page
                         sendHtml(out, getMobileHtml());
@@ -387,6 +477,14 @@ public class ZoomService extends Service {
         }).start();
     }
 
+    private void sendPqResult(OutputStream out, String type, int val, String r) throws Exception {
+        if (r != null && r.startsWith("OK")) {
+            sendJson(out, "{\"status\":\"ok\",\"type\":\"" + type + "\",\"val\":" + val + "}");
+        } else {
+            sendJson(out, "{\"status\":\"error\",\"type\":\"" + type + "\",\"val\":" + val + ",\"msg\":\"" + escapeJson(r) + "\"}");
+        }
+    }
+
     private void sendJson(OutputStream out, String json) throws Exception {
         byte[] bytes = json.getBytes("UTF-8");
         String header = "HTTP/1.1 200 OK\r\n" +
@@ -430,8 +528,8 @@ public class ZoomService extends Service {
         sb.append(".val-badge { font-family: monospace; font-size: 13px; font-weight: 700; color: #38bdf8; background: #0f172a; padding: 2px 7px; border-radius: 6px; border: 1px solid #334155; min-width: 42px; text-align: center; }");
         sb.append(".btn-rst { background: #334155; border: 1px solid #475569; color: #cbd5e1; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; cursor: pointer; transition: all 0.15s ease; }");
         sb.append(".btn-rst:active { background: #0284c7; color: #fff; border-color: #38bdf8; transform: scale(0.94); }");
-        sb.append("input[type=range] { width: 100%; -webkit-appearance: none; height: 7px; border-radius: 4px; background: #334155; outline: none; margin: 6px 0 2px; }");
-        sb.append("input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #38bdf8; box-shadow: 0 0 10px rgba(56,189,248,0.7); cursor: pointer; border: 2px solid #fff; }");
+        sb.append("input[type=range] { width: 100%; -webkit-appearance: none; height: 7px; border-radius: 4px; background: #334155; outline: none; margin: 6px 0 2px; touch-action: pan-y; cursor: default; }");
+        sb.append("input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: #38bdf8; box-shadow: 0 0 10px rgba(56,189,248,0.7); cursor: grab; border: 2px solid #fff; }");
         sb.append(".range-labels { display: flex; justify-content: space-between; font-size: 10px; color: #64748b; margin-top: 2px; }");
         sb.append(".btn-dnlp { background: #334155; color: #f8fafc; border: 1px solid #475569; border-radius: 12px; padding: 12px 10px; font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }");
         sb.append(".btn-dnlp.active { background: linear-gradient(135deg, #0284c7, #0369a1); border-color: #38bdf8; }");
@@ -447,10 +545,67 @@ public class ZoomService extends Service {
         sb.append("button.zoom-btn.active .sub { color: #e0f2fe; }");
         sb.append(".btn-reset-zoom { background: #475569; margin-top: 8px; padding: 13px; border-radius: 12px; border: 1px solid #64748b; color: #fff; font-weight: 600; cursor: pointer; width: 100%; }");
         sb.append(".btn-reset-zoom:active { transform: scale(0.98); }");
+        sb.append(".pill-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 6px 0 10px; }");
+        sb.append(".btn-pill { background: #334155; border: 1px solid #475569; color: #cbd5e1; font-size: 11px; font-weight: 600; padding: 6px 2px; border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.15s ease; }");
+        sb.append(".btn-pill:active { background: #0284c7; color: #fff; transform: scale(0.95); }");
+        sb.append(".btn-pill.active { background: #0284c7; color: #fff; border-color: #38bdf8; }");
+        sb.append(".card-hdr { border: 1px solid #38bdf8; background: radial-gradient(circle at top left, #1e293b, #0f172a); }");
         sb.append(".toast { position: fixed; bottom: 25px; background: rgba(15, 23, 42, 0.95); color: #38bdf8; border: 1px solid #38bdf8; padding: 9px 18px; border-radius: 25px; font-size: 13px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity 0.2s ease; z-index: 999; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }");
         sb.append(".toast.show { opacity: 1; }");
         sb.append("</style></head><body>");
-        sb.append("<div class=\"header\"><div class=\"title\">🎬 斐讯 T1 影音画质控制中心</div><div class=\"subtitle\">晶晨 S912 硬件级零损耗缩放与色彩微调 (v3.1 诊断增强版)</div></div>");
+        sb.append("<div class=\"header\"><div class=\"title\">🎬 斐讯 T1 影音画质控制中心</div><div class=\"subtitle\">晶晨 S912 硬件级零损耗缩放与 BT.2390 影院画质 (v4.0 HDR 增强版)</div></div>");
+
+        // Card 0.5: HDR BT.2390 Cinema Tone Mapping
+        sb.append("<div class=\"card card-hdr\">");
+        sb.append("<div class=\"section-title\"><span>🌟 影院级 BT.2390 高动态映射 (明基 TK700)</span><span style=\"font-size:11px;color:#38bdf8;\">HDR➔SDR</span></div>");
+
+        // BT.2390 Main Toggle
+        sb.append("<button id=\"btn-bt2390\" class=\"btn-dnlp active\" onclick=\"toggleBt2390()\"><span>⚡ BT.2390 影院色调映射 (Ultra Punch 35点曲线)</span><span id=\"bt2390-txt\" class=\"status-tag\" style=\"background:#22c55e;color:#000;\">已开启</span></button>");
+
+        // EOTF Highlight Boost Slider & Pills
+        sb.append("<div class=\"pq-item\" style=\"margin-top:14px;\"><div class=\"pq-header\"><span class=\"pq-label\">✨ 高光动态爆发 (Highlight Boost)</span><div class=\"pq-controls\"><span id=\"val-eotf\" class=\"val-badge\">1.10x</span><button class=\"btn-rst\" onclick=\"setEotfPreset(110)\">↺ 黄金1.1x</button></div></div>");
+        sb.append("<div class=\"pill-grid\">");
+        sb.append("<button class=\"btn-pill\" id=\"pill-eotf-100\" onclick=\"setEotfPreset(100)\">1.00x 标准</button>");
+        sb.append("<button class=\"btn-pill\" id=\"pill-eotf-105\" onclick=\"setEotfPreset(105)\">1.05x 温和</button>");
+        sb.append("<button class=\"btn-pill active\" id=\"pill-eotf-110\" onclick=\"setEotfPreset(110)\">1.10x 推荐</button>");
+        sb.append("<button class=\"btn-pill\" id=\"pill-eotf-115\" onclick=\"setEotfPreset(115)\">1.15x 极亮</button>");
+        sb.append("</div>");
+        sb.append("<input type=\"range\" id=\"range-eotf\" min=\"100\" max=\"125\" value=\"110\" step=\"1\" oninput=\"onSlideEotf(this.value)\">");
+        sb.append("<div class=\"range-labels\"><span>1.00x (原盘)</span><span>1.10x (黄金推荐)</span><span>1.25x (超强)</span></div></div>");
+
+        // Black Extension Slider & Pills
+        sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">🌑 暗场黑位沉底 (Black Extension)</span><div class=\"pq-controls\"><span id=\"val-bext\" class=\"val-badge\">8</span><button class=\"btn-rst\" onclick=\"setBextPreset(8)\">↺ 默认 8</button></div></div>");
+        sb.append("<div class=\"pill-grid\">");
+        sb.append("<button class=\"btn-pill\" id=\"pill-bext-0\" onclick=\"setBextPreset(0)\">0 原生</button>");
+        sb.append("<button class=\"btn-pill active\" id=\"pill-bext-8\" onclick=\"setBextPreset(8)\">8 推荐</button>");
+        sb.append("<button class=\"btn-pill\" id=\"pill-bext-16\" onclick=\"setBextPreset(16)\">16 纯黑</button>");
+        sb.append("<button class=\"btn-pill\" id=\"pill-bext-24\" onclick=\"setBextPreset(24)\">24 极黑</button>");
+        sb.append("</div>");
+        sb.append("<input type=\"range\" id=\"range-bext\" min=\"0\" max=\"24\" value=\"8\" step=\"2\" oninput=\"onSlideBext(this.value)\">");
+        sb.append("<div class=\"range-labels\"><span>0 (关闭下潜)</span><span>8 (保细节下潜)</span><span>24 (极致纯黑)</span></div></div>");
+
+        // BT.2390 Custom Fine-Tuning Sliders
+        sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">📐 曲线介入强度 (knee_factor)</span><div class=\"pq-controls\"><span id=\"val-kfactor\" class=\"val-badge\">256</span><button class=\"btn-rst\" onclick=\"setHdrParam('kfactor', 256)\">↺ 默认 256</button></div></div>");
+        sb.append("<input type=\"range\" id=\"range-kfactor\" min=\"0\" max=\"256\" value=\"256\" step=\"1\" oninput=\"onSlideHdr('kfactor', this.value)\">");
+        sb.append("<div class=\"range-labels\"><span>0 (线性无压缩)</span><span>128 (半幅混合)</span><span>256 (100% 满血曲线)</span></div></div>");
+
+        sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">🎨 HDR➔SDR 饱和度补偿</span><div class=\"pq-controls\"><span id=\"val-sdrsat\" class=\"val-badge\">50</span><button class=\"btn-rst\" onclick=\"setHdrParam('sdrsat', 50)\">↺ 默认 50</button></div></div>");
+        sb.append("<input type=\"range\" id=\"range-sdrsat\" min=\"0\" max=\"100\" value=\"50\" step=\"1\" oninput=\"onSlideHdr('sdrsat', this.value)\">");
+        sb.append("<div class=\"range-labels\"><span>0 (无补偿)</span><span>50 (标准补偿)</span><span>100 (浓烈高饱)</span></div></div>");
+
+        sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">☀️ 白场高光动态拉伸</span><div class=\"pq-controls\"><span id=\"val-whtext\" class=\"val-badge\">16</span><button class=\"btn-rst\" onclick=\"setHdrParam('whtext', 16)\">↺ 默认 16</button></div></div>");
+        sb.append("<input type=\"range\" id=\"range-whtext\" min=\"0\" max=\"64\" value=\"16\" step=\"1\" oninput=\"onSlideHdr('whtext', this.value)\">");
+        sb.append("<div class=\"range-labels\"><span>0 (关闭拉伸)</span><span>16 (黄金推荐)</span><span>64 (极限提亮)</span></div></div>");
+
+        // VPP Dither & 10bit NR Grid
+        sb.append("<div class=\"btn-grid\" style=\"margin-top:10px;\">");
+        sb.append("<button id=\"btn-dither\" class=\"zoom-btn active\" onclick=\"toggleDither()\">🌈 10-bit 空间平滑抖动<span id=\"dither-txt\" class=\"sub\" style=\"color:#e0f2fe;\">已开启 (杜绝断层)</span></button>");
+        sb.append("<button id=\"btn-nr10\" class=\"zoom-btn active\" onclick=\"toggleNr10()\">🛡 10-bit 硬件降噪<span id=\"nr10-txt\" class=\"sub\" style=\"color:#e0f2fe;\">已开启 (纯净细腻)</span></button>");
+        sb.append("</div>");
+
+        // 10-bit HDMI Negotiation
+        sb.append("<button class=\"btn-reset-pq\" style=\"margin-top:12px;background:#0369a1;color:#fff;border-color:#38bdf8;\" onclick=\"trigger10Bit()\">💎 4K 60Hz 10-bit 物理重协商 (cd=5)</button>");
+        sb.append("</div>");
 
         // Card 0: System Doctor
         sb.append("<div class=\"card\" style=\"border:1px solid #0284c7;\">");
@@ -490,8 +645,15 @@ public class ZoomService extends Service {
         // DNLP toggle
         sb.append("<button id=\"btn-dnlp\" class=\"btn-dnlp\" onclick=\"toggleDnlp()\"><span>⚡ 硬件动态对比度 (DNLP 智能去灰)</span><span id=\"dnlp-txt\" class=\"status-tag\">已关闭</span></button>");
 
-        // CM Color Management toggle
-        sb.append("<button id=\"btn-cm\" class=\"btn-dnlp\" onclick=\"toggleCm()\" style=\"margin-top:8px;\"><span>🎭 CM2 硬件色彩管理 (智能肤色保护)</span><span id=\"cm-txt\" class=\"status-tag\">已关闭</span></button>");
+        // CM2 Color Management (Off + 3 Levels)
+        sb.append("<div class=\"pq-item\" style=\"margin-top:12px;margin-bottom:4px;\">");
+        sb.append("<div class=\"pq-header\"><span class=\"pq-label\">🎭 CM2 色彩管理 (6色校正与肤色保护)</span><div class=\"pq-controls\"><span id=\"val-cm\" class=\"val-badge\">1档 自然</span></div></div>");
+        sb.append("<div class=\"pill-grid\">");
+        sb.append("<button class=\"btn-pill\" id=\"pill-cm-0\" onclick=\"setCmLevel(0)\">关闭</button>");
+        sb.append("<button class=\"btn-pill active\" id=\"pill-cm-1\" onclick=\"setCmLevel(1)\">1档 自然</button>");
+        sb.append("<button class=\"btn-pill\" id=\"pill-cm-2\" onclick=\"setCmLevel(2)\">2档 鲜艳</button>");
+        sb.append("<button class=\"btn-pill\" id=\"pill-cm-3\" onclick=\"setCmLevel(3)\">3档 艳丽</button>");
+        sb.append("</div></div>");
 
         // Reset All PQ
         sb.append("<button class=\"btn-reset-pq\" onclick=\"resetPq('all')\">↺ 复位所有画质参数至默认 (0)</button>");
@@ -500,9 +662,9 @@ public class ZoomService extends Service {
         // Card 2: Zoom
         sb.append("<div class=\"card\"><div class=\"section-title\"><span>🔍 硬件数字变焦 (无损切黑边)</span></div>");
         sb.append("<div class=\"btn-grid-3\">");
-        sb.append("<button class=\"zoom-btn\" onclick=\"setZ(115)\">115%<span class=\"sub\">轻微变焦</span></button>");
-        sb.append("<button class=\"zoom-btn active\" onclick=\"setZ(125)\">125%<span class=\"sub\">2.35:1 铺满</span></button>");
-        sb.append("<button class=\"zoom-btn\" onclick=\"setZ(133)\">133%<span class=\"sub\">完全拉满</span></button>");
+        sb.append("<button id=\"btn-zoom-115\" class=\"zoom-btn\" onclick=\"setZ(115)\">115%<span class=\"sub\">轻微变焦</span></button>");
+        sb.append("<button id=\"btn-zoom-125\" class=\"zoom-btn\" onclick=\"setZ(125)\">125%<span class=\"sub\">2.35:1 铺满</span></button>");
+        sb.append("<button id=\"btn-zoom-133\" class=\"zoom-btn\" onclick=\"setZ(133)\">133%<span class=\"sub\">完全拉满</span></button>");
         sb.append("</div></div>");
 
         // Card 3: Screen Mode
@@ -522,6 +684,11 @@ public class ZoomService extends Service {
         sb.append("<script>");
         sb.append("let dnlpVal = 0;");
         sb.append("let cmVal = 0;");
+        sb.append("let bt2390Val = 1;");
+        sb.append("let ditherVal = 1;");
+        sb.append("let nr10Val = 1;");
+        sb.append("let eotfVal = 110;");
+        sb.append("let bextVal = 8;");
         sb.append("let currentDiagReport = '';");
         sb.append("const timers = {};");
         sb.append("function toast(msg, isErr){");
@@ -537,21 +704,118 @@ public class ZoomService extends Service {
         sb.append("  document.getElementById('val-'+type).textContent=fmtVal(val);");
         sb.append("  clearTimeout(timers[type]);");
         sb.append("  timers[type]=setTimeout(()=>{");
-        sb.append("    fetch('/api/pq?type='+type+'&val='+val).then(r=>r.json()).then(d=>toast(getName(type)+' 已设为 '+fmtVal(val))).catch(e=>toast('设置失败', true));");
+        sb.append("    fetch('/api/pq?type='+type+'&val='+val).then(r=>r.json()).then(d=>d.status!=='ok'?toast('写入失败: '+(d.msg||''),true):toast(getName(type)+' 已设为 '+fmtVal(val))).catch(e=>toast('设置失败', true));");
         sb.append("  }, 60);");
         sb.append("}");
         sb.append("function getName(t){if(t==='brightness')return '亮度';if(t==='contrast')return '对比度';if(t==='saturation')return '色彩';if(t==='hue')return '肤色/色相';return t;}");
+        sb.append("function onSlideEotf(v){");
+        sb.append("  eotfVal = parseInt(v);");
+        sb.append("  const f = (eotfVal/100).toFixed(2) + 'x';");
+        sb.append("  document.getElementById('val-eotf').textContent = f;");
+        sb.append("  updateEotfPill(eotfVal);");
+        sb.append("  clearTimeout(timers['eotf']);");
+        sb.append("  timers['eotf']=setTimeout(()=>{");
+        sb.append("    fetch('/api/pq?type=eotf&val='+eotfVal).then(r=>r.json()).then(d=>d.status!=='ok'?toast('写入失败: '+(d.msg||''),true):toast('高光放大已设为 '+f)).catch(e=>toast('设置失败', true));");
+        sb.append("  }, 60);");
+        sb.append("}");
+        sb.append("function setEotfPreset(v){");
+        sb.append("  setRangeVal('range-eotf', v);");
+        sb.append("  onSlideEotf(v);");
+        sb.append("}");
+        sb.append("function updateEotfPill(v){");
+        sb.append("  document.querySelectorAll('[id^=\"pill-eotf-\"]').forEach(p=>p.classList.remove('active'));");
+        sb.append("  const p = document.getElementById('pill-eotf-'+v);");
+        sb.append("  if(p) p.classList.add('active');");
+        sb.append("}");
+        sb.append("function onSlideBext(v){");
+        sb.append("  bextVal = parseInt(v);");
+        sb.append("  document.getElementById('val-bext').textContent = bextVal;");
+        sb.append("  updateBextPill(bextVal);");
+        sb.append("  clearTimeout(timers['bext']);");
+        sb.append("  timers['bext']=setTimeout(()=>{");
+        sb.append("    fetch('/api/pq?type=bext&val='+bextVal).then(r=>r.json()).then(d=>d.status!=='ok'?toast('写入失败: '+(d.msg||''),true):toast('黑位沉底已设为 '+bextVal)).catch(e=>toast('设置失败', true));");
+        sb.append("  }, 60);");
+        sb.append("}");
+        sb.append("function setBextPreset(v){");
+        sb.append("  setRangeVal('range-bext', v);");
+        sb.append("  onSlideBext(v);");
+        sb.append("}");
+        sb.append("function updateBextPill(v){");
+        sb.append("  document.querySelectorAll('[id^=\"pill-bext-\"]').forEach(p=>p.classList.remove('active'));");
+        sb.append("  const p = document.getElementById('pill-bext-'+v);");
+        sb.append("  if(p) p.classList.add('active');");
+        sb.append("}");
+        sb.append("function getHdrName(t){if(t==='kfactor')return '曲线介入强度';if(t==='sdrsat')return '饱和度补偿';if(t==='whtext')return '白场动态拉伸';return t;}");
+        sb.append("function onSlideHdr(type, val){");
+        sb.append("  const n = parseInt(val);");
+        sb.append("  document.getElementById('val-'+type).textContent = n;");
+        sb.append("  clearTimeout(timers[type]);");
+        sb.append("  timers[type]=setTimeout(()=>{");
+        sb.append("    fetch('/api/pq?type='+type+'&val='+n).then(r=>r.json()).then(d=>d.status!=='ok'?toast('写入失败: '+(d.msg||''),true):toast(getHdrName(type)+' 已设为 '+n)).catch(e=>toast('设置失败', true));");
+        sb.append("  }, 60);");
+        sb.append("}");
+        sb.append("function setHdrParam(type, val){");
+        sb.append("  setRangeVal('range-'+type, val);");
+        sb.append("  onSlideHdr(type, val);");
+        sb.append("}");
+        sb.append("function toggleBt2390(){");
+        sb.append("  const nVal = bt2390Val === 1 ? 0 : 1;");
+        sb.append("  fetch('/api/pq?type=bt2390&val='+nVal).then(r=>r.json()).then(d=>{if(d.status!=='ok'){toast('写入失败: '+(d.msg||''),true);return;}");
+        sb.append("    setBt2390UI(nVal);");
+        sb.append("    toast('BT.2390 影院映射 '+(nVal===1?'已开启':'已关闭'));");
+        sb.append("  }).catch(e=>toast('设置失败', true));");
+        sb.append("}");
+        sb.append("function setBt2390UI(v){");
+        sb.append("  bt2390Val = v;");
+        sb.append("  const btn = document.getElementById('btn-bt2390');");
+        sb.append("  const txt = document.getElementById('bt2390-txt');");
+        sb.append("  if(v===1){btn.classList.add('active');txt.textContent='已开启 (接管算法)';txt.style.background='#22c55e';txt.style.color='#000';}");
+        sb.append("  else{btn.classList.remove('active');txt.textContent='已关闭 (直通)';txt.style.background='rgba(0,0,0,0.3)';txt.style.color='#cbd5e1';}");
+        sb.append("}");
+        sb.append("function toggleDither(){");
+        sb.append("  const nVal = ditherVal === 1 ? 0 : 1;");
+        sb.append("  fetch('/api/pq?type=dither&val='+nVal).then(r=>r.json()).then(d=>{if(d.status!=='ok'){toast('写入失败: '+(d.msg||''),true);return;}");
+        sb.append("    setDitherUI(nVal);");
+        sb.append("    toast('10-bit 空间抖动 '+(nVal===1?'已开启':'已关闭'));");
+        sb.append("  }).catch(e=>toast('设置失败', true));");
+        sb.append("}");
+        sb.append("function setDitherUI(v){");
+        sb.append("  ditherVal = v;");
+        sb.append("  const btn = document.getElementById('btn-dither');");
+        sb.append("  const txt = document.getElementById('dither-txt');");
+        sb.append("  if(v===1){btn.classList.add('active');txt.textContent='已开启 (杜绝断层)';txt.style.color='#e0f2fe';}");
+        sb.append("  else{btn.classList.remove('active');txt.textContent='已关闭';txt.style.color='#94a3b8';}");
+        sb.append("}");
+        sb.append("function toggleNr10(){");
+        sb.append("  const nVal = nr10Val === 1 ? 0 : 1;");
+        sb.append("  fetch('/api/pq?type=nr10&val='+nVal).then(r=>r.json()).then(d=>{if(d.status!=='ok'){toast('写入失败: '+(d.msg||''),true);return;}");
+        sb.append("    setNr10UI(nVal);");
+        sb.append("    toast('10-bit 硬件降噪 '+(nVal===1?'已开启':'已关闭'));");
+        sb.append("  }).catch(e=>toast('设置失败', true));");
+        sb.append("}");
+        sb.append("function setNr10UI(v){");
+        sb.append("  nr10Val = v;");
+        sb.append("  const btn = document.getElementById('btn-nr10');");
+        sb.append("  const txt = document.getElementById('nr10-txt');");
+        sb.append("  if(v===1){btn.classList.add('active');txt.textContent='已开启 (纯净细腻)';txt.style.color='#e0f2fe';}");
+        sb.append("  else{btn.classList.remove('active');txt.textContent='已关闭';txt.style.color='#94a3b8';}");
+        sb.append("}");
+        sb.append("function trigger10Bit(){");
+        sb.append("  fetch('/api/pq?type=10bit').then(r=>r.json()).then(d=>{if(d.status!=='ok'){toast('写入失败: '+(d.msg||''),true);return;}");
+        sb.append("    toast('已触发 4K 10-bit 硬件握手重协商');");
+        sb.append("  }).catch(e=>toast('重协商请求失败', true));");
+        sb.append("}");
         sb.append("function resetPq(type){");
-        sb.append("  if(type==='brightness'||type==='all'){document.getElementById('range-brightness').value=0;document.getElementById('val-brightness').textContent='0';}");
-        sb.append("  if(type==='contrast'||type==='all'){document.getElementById('range-contrast').value=0;document.getElementById('val-contrast').textContent='0';}");
-        sb.append("  if(type==='saturation'||type==='all'){document.getElementById('range-saturation').value=0;document.getElementById('val-saturation').textContent='0';}");
-        sb.append("  if(type==='hue'||type==='all'){document.getElementById('range-hue').value=0;document.getElementById('val-hue').textContent='0';}");
+        sb.append("  if(type==='brightness'||type==='all'){setRangeVal('range-brightness',0);document.getElementById('val-brightness').textContent='0';}");
+        sb.append("  if(type==='contrast'||type==='all'){setRangeVal('range-contrast',0);document.getElementById('val-contrast').textContent='0';}");
+        sb.append("  if(type==='saturation'||type==='all'){setRangeVal('range-saturation',0);document.getElementById('val-saturation').textContent='0';}");
+        sb.append("  if(type==='hue'||type==='all'){setRangeVal('range-hue',0);document.getElementById('val-hue').textContent='0';}");
         sb.append("  if(type==='all'){setDnlpUI(0);setCmUI(0);}");
-        sb.append("  fetch('/api/pq?type=reset&item='+type).then(r=>r.json()).then(d=>toast((type==='all'?'全部画质':getName(type))+' 已复位为 0')).catch(e=>toast('复位失败', true));");
+        sb.append("  fetch('/api/pq?type=reset&item='+type).then(r=>r.json()).then(d=>d.status!=='ok'?toast('写入失败: '+(d.msg||''),true):toast((type==='all'?'全部画质':getName(type))+' 已复位为 0')).catch(e=>toast('复位失败', true));");
         sb.append("}");
         sb.append("function toggleDnlp(){");
         sb.append("  const nVal = dnlpVal === 1 ? 0 : 1;");
-        sb.append("  fetch('/api/pq?type=dnlp&val='+nVal).then(r=>r.json()).then(d=>{setDnlpUI(nVal);toast('动态对比度 (DNLP) '+(nVal===1?'已开启':'已关闭'));}).catch(e=>toast('设置失败', true));");
+        sb.append("  fetch('/api/pq?type=dnlp&val='+nVal).then(r=>r.json()).then(d=>{if(d.status!=='ok'){toast('写入失败: '+(d.msg||''),true);return;}setDnlpUI(nVal);toast('动态对比度 (DNLP) '+(nVal===1?'已开启':'已关闭'));}).catch(e=>toast('设置失败', true));");
         sb.append("}");
         sb.append("function setDnlpUI(v){");
         sb.append("  dnlpVal = v;");
@@ -560,18 +824,23 @@ public class ZoomService extends Service {
         sb.append("  if(v===1){btn.classList.add('active');txt.textContent='已开启 (去灰增强)';txt.style.background='#22c55e';txt.style.color='#000';}");
         sb.append("  else{btn.classList.remove('active');txt.textContent='已关闭';txt.style.background='rgba(0,0,0,0.3)';txt.style.color='#cbd5e1';}");
         sb.append("}");
-        sb.append("function toggleCm(){");
-        sb.append("  const nVal = cmVal === 1 ? 0 : 1;");
-        sb.append("  fetch('/api/pq?type=cm&val='+nVal).then(r=>r.json()).then(d=>{setCmUI(nVal);toast('CM 色彩与肤色保护 '+(nVal===1?'已开启':'已关闭'));}).catch(e=>toast('设置失败', true));");
+        sb.append("const CM_NAMES = ['关闭', '1档 自然', '2档 鲜艳', '3档 艳丽'];");
+        sb.append("function setCmLevel(v){");
+        sb.append("  fetch('/api/pq?type=cm&val='+v).then(r=>r.json()).then(d=>{if(d.status!=='ok'){toast('写入失败: '+(d.msg||''),true);return;}setCmUI(v);toast(v===0?'CM2 色彩管理已关闭':'CM2 色彩管理: '+CM_NAMES[v]);}).catch(e=>toast('设置失败', true));");
         sb.append("}");
         sb.append("function setCmUI(v){");
         sb.append("  cmVal = v;");
-        sb.append("  const btn = document.getElementById('btn-cm');");
-        sb.append("  const txt = document.getElementById('cm-txt');");
-        sb.append("  if(v===1){btn.classList.add('active');txt.textContent='已开启 (保护肤色)';txt.style.background='#22c55e';txt.style.color='#000';}");
-        sb.append("  else{btn.classList.remove('active');txt.textContent='已关闭';txt.style.background='rgba(0,0,0,0.3)';txt.style.color='#cbd5e1';}");
+        sb.append("  const b = document.getElementById('val-cm');");
+        sb.append("  if(b) b.textContent = CM_NAMES[v] || '关闭';");
+        sb.append("  document.querySelectorAll('[id^=\"pill-cm-\"]').forEach(p=>p.classList.remove('active'));");
+        sb.append("  const p = document.getElementById('pill-cm-'+v);");
+        sb.append("  if(p) p.classList.add('active');");
         sb.append("}");
-        sb.append("function setZ(v){fetch('/api/zoom?val='+v).then(r=>r.json()).then(d=>{if(d.status==='ok')toast('已变焦至 '+v+'% (切除黑边)');else toast('变焦失败: '+d.msg, true);}).catch(e=>toast('设置失败', true));}");
+        sb.append("function setZoomUI(v){");
+        sb.append("  document.querySelectorAll('[id^=\"btn-zoom-\"]').forEach(b=>b.classList.remove('active'));");
+        sb.append("  const b=document.getElementById('btn-zoom-'+v); if(b) b.classList.add('active');");
+        sb.append("}");
+        sb.append("function setZ(v){fetch('/api/zoom?val='+v).then(r=>r.json()).then(d=>{if(d.status==='ok'){setZoomUI(v);toast('已变焦至 '+v+'% (切除黑边)');}else toast('变焦失败: '+d.msg, true);}).catch(e=>toast('设置失败', true));}");
         sb.append("function setM(v){");
         sb.append("  const name = v === 1 ? '全屏强制拉伸 (消除黑边)' : (v === 4 ? '智能非线性拉伸 (人物防变形)' : ('屏幕模式 ' + v));");
         sb.append("  fetch('/api/mode?val='+v).then(r=>r.json()).then(d=>{");
@@ -584,7 +853,9 @@ public class ZoomService extends Service {
         sb.append("}");
         sb.append("function resetA(){");
         sb.append("  fetch('/api/reset').then(r=>r.json()).then(d=>{");
+        sb.append("    if(d.status!=='ok'){toast('重置失败: '+(d.msg||''),true);return;}");
         sb.append("    document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));");
+        sb.append("    setZoomUI(100);");
         sb.append("    toast('已恢复 100% 原始比例');");
         sb.append("  }).catch(e=>toast('重置失败', true));");
         sb.append("}");
@@ -624,14 +895,75 @@ public class ZoomService extends Service {
         sb.append("  document.body.removeChild(ta);");
         sb.append("  toast('已复制体检报告');");
         sb.append("}");
+        sb.append("function setRangeVal(id, v){");
+        sb.append("  const el=document.getElementById(id);");
+        sb.append("  if(!el)return;");
+        sb.append("  el.value=v;");
+        sb.append("  el.dataset.val=String(v);");
+        sb.append("}");
+        sb.append("function initRangeGuard(){");
+        sb.append("  document.querySelectorAll('input[type=\"range\"]').forEach(el=>{");
+        sb.append("    el.dataset.val=el.value;");
+        sb.append("    el._canDrag=false;");
+        sb.append("    el._dragging=false;");
+        sb.append("    const onStart=(x,e,isMouse)=>{");
+        sb.append("      const rect=el.getBoundingClientRect();");
+        sb.append("      const min=parseFloat(el.min||'0'), max=parseFloat(el.max||'100');");
+        sb.append("      const cur=parseFloat(el.dataset.val!==undefined?el.dataset.val:el.value);");
+        sb.append("      const ratio=(max>min)?(cur-min)/(max-min):0;");
+        sb.append("      const thumbX=rect.left+12+ratio*(rect.width-24);");
+        sb.append("      if(Math.abs(x-thumbX)<=24){");
+        sb.append("        el._canDrag=true; el._dragging=false; el._startX=x;");
+        sb.append("      }else{");
+        sb.append("        el._canDrag=false; el._dragging=false;");
+        sb.append("        if(isMouse&&e)e.preventDefault();");
+        sb.append("      }");
+        sb.append("    };");
+        sb.append("    const onMove=(x)=>{");
+        sb.append("      if(el._canDrag&&Math.abs(x-el._startX)>=2){el._dragging=true;}");
+        sb.append("    };");
+        sb.append("    const onEnd=()=>{");
+        sb.append("      if(!el._dragging&&el.dataset.val!==undefined){el.value=el.dataset.val;}");
+        sb.append("      el._canDrag=false; el._dragging=false;");
+        sb.append("    };");
+        sb.append("    el.addEventListener('touchstart',e=>{if(e.touches.length===1)onStart(e.touches[0].clientX,e,false);},{passive:true});");
+        sb.append("    el.addEventListener('touchmove',e=>{if(e.touches.length===1)onMove(e.touches[0].clientX);},{passive:true});");
+        sb.append("    el.addEventListener('touchend',onEnd);");
+        sb.append("    el.addEventListener('touchcancel',onEnd);");
+        sb.append("    el.addEventListener('mousedown',e=>onStart(e.clientX,e,true));");
+        sb.append("    window.addEventListener('mousemove',e=>{if(el._canDrag)onMove(e.clientX);});");
+        sb.append("    window.addEventListener('mouseup',()=>{if(el._canDrag)onEnd();});");
+        sb.append("    const blockIfNotDrag=e=>{");
+        sb.append("      if(!el._dragging){");
+        sb.append("        if(el.dataset.val!==undefined)el.value=el.dataset.val;");
+        sb.append("        e.stopImmediatePropagation();");
+        sb.append("        return;");
+        sb.append("      }");
+        sb.append("      el.dataset.val=el.value;");
+        sb.append("    };");
+        sb.append("    el.addEventListener('input',blockIfNotDrag,true);");
+        sb.append("    el.addEventListener('change',blockIfNotDrag,true);");
+        sb.append("  });");
+        sb.append("}");
         sb.append("window.addEventListener('DOMContentLoaded',()=>{");
+        sb.append("  initRangeGuard();");
         sb.append("  fetch('/api/status').then(r=>r.json()).then(d=>{");
-        sb.append("    if(d.brightness!==undefined){document.getElementById('range-brightness').value=d.brightness;document.getElementById('val-brightness').textContent=fmtVal(d.brightness);}");
-        sb.append("    if(d.contrast!==undefined){document.getElementById('range-contrast').value=d.contrast;document.getElementById('val-contrast').textContent=fmtVal(d.contrast);}");
-        sb.append("    if(d.saturation!==undefined){document.getElementById('range-saturation').value=d.saturation;document.getElementById('val-saturation').textContent=fmtVal(d.saturation);}");
-        sb.append("    if(d.hue!==undefined){document.getElementById('range-hue').value=d.hue;document.getElementById('val-hue').textContent=fmtVal(d.hue);}");
+        sb.append("    if(d.brightness!==undefined){setRangeVal('range-brightness',d.brightness);document.getElementById('val-brightness').textContent=fmtVal(d.brightness);}");
+        sb.append("    if(d.contrast!==undefined){setRangeVal('range-contrast',d.contrast);document.getElementById('val-contrast').textContent=fmtVal(d.contrast);}");
+        sb.append("    if(d.saturation!==undefined){setRangeVal('range-saturation',d.saturation);document.getElementById('val-saturation').textContent=fmtVal(d.saturation);}");
+        sb.append("    if(d.hue!==undefined){setRangeVal('range-hue',d.hue);document.getElementById('val-hue').textContent=fmtVal(d.hue);}");
         sb.append("    if(d.dnlp!==undefined){setDnlpUI(d.dnlp);}");
         sb.append("    if(d.cm!==undefined){setCmUI(d.cm);}");
+        sb.append("    if(d.eotf!==undefined){setRangeVal('range-eotf',d.eotf);document.getElementById('val-eotf').textContent=(d.eotf/100).toFixed(2)+'x';updateEotfPill(d.eotf);}");
+        sb.append("    if(d.bext!==undefined){setRangeVal('range-bext',d.bext);document.getElementById('val-bext').textContent=d.bext;updateBextPill(d.bext);}");
+        sb.append("    if(d.dither!==undefined){setDitherUI(d.dither);}");
+        sb.append("    if(d.nr10!==undefined){setNr10UI(d.nr10);}");
+        sb.append("    if(d.bt2390!==undefined){setBt2390UI(d.bt2390);}");
+        sb.append("    if(d.kfactor!==undefined){setRangeVal('range-kfactor',d.kfactor);document.getElementById('val-kfactor').textContent=d.kfactor;}");
+        sb.append("    if(d.sdrsat!==undefined){setRangeVal('range-sdrsat',d.sdrsat);document.getElementById('val-sdrsat').textContent=d.sdrsat;}");
+        sb.append("    if(d.whtext!==undefined){setRangeVal('range-whtext',d.whtext);document.getElementById('val-whtext').textContent=d.whtext;}");
+        sb.append("    if(d.zoom!==undefined){setZoomUI(d.zoom);}");
+        sb.append("    if(d.mode!==undefined){document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));const mb=document.getElementById('btn-mode-'+d.mode);if(mb)mb.classList.add('active');}");
         sb.append("  }).catch(()=>{});");
         sb.append("});");
         sb.append("</script></body></html>");

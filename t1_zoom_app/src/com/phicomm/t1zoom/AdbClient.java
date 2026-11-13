@@ -40,16 +40,25 @@ public class AdbClient {
 
     private static int activeChannel = CHANNEL_UNKNOWN;
     private static String activeChannelDesc = "未检测";
+    private static long lastDetectFailTs = 0;
 
     // Current State
     private static int curZoom = 100;
     private static int curMode = 0;
     private static int curBrightness = 0;
-    private static int curContrast = 0;
+    private static int curContrast = 35;
     private static int curSaturation = 0;
     private static int curHue = 0;
-    private static int curDnlp = 0;
-    private static int curCm = 0;
+    private static int curDnlp = 1;
+    private static int curCm = 1;
+    private static int curEotf = 110;
+    private static int curBext = 8;
+    private static int curDither = 1;
+    private static int curNr10 = 1;
+    private static int curBt2390 = 1;
+    private static int curKneeFactor = 256; // 0 to 256
+    private static int curSdrSat = 50;      // 0 to 100
+    private static int curWhtext = 16;      // 0 to 64
 
     public static int getCurZoom() { return curZoom; }
     public static int getCurMode() { return curMode; }
@@ -59,6 +68,14 @@ public class AdbClient {
     public static int getCurHue() { return curHue; }
     public static int getCurDnlp() { return curDnlp; }
     public static int getCurCm() { return curCm; }
+    public static int getCurEotf() { return curEotf; }
+    public static int getCurBext() { return curBext; }
+    public static int getCurDither() { return curDither; }
+    public static int getCurNr10() { return curNr10; }
+    public static int getCurBt2390() { return curBt2390; }
+    public static int getCurKneeFactor() { return curKneeFactor; }
+    public static int getCurSdrSat() { return curSdrSat; }
+    public static int getCurWhtext() { return curWhtext; }
 
     public static void setCurBrightness(int b) { curBrightness = b; }
     public static void setCurContrast(int c) { curContrast = c; }
@@ -66,6 +83,14 @@ public class AdbClient {
     public static void setCurHue(int h) { curHue = h; }
     public static void setCurDnlp(int d) { curDnlp = d; }
     public static void setCurCm(int cm) { curCm = cm; }
+    public static void setCurEotf(int e) { curEotf = e; }
+    public static void setCurBext(int b) { curBext = b; }
+    public static void setCurDither(int d) { curDither = d; }
+    public static void setCurNr10(int nr) { curNr10 = nr; }
+    public static void setCurBt2390(int bt) { curBt2390 = bt; }
+    public static void setCurKneeFactor(int kf) { curKneeFactor = kf; }
+    public static void setCurSdrSat(int ss) { curSdrSat = ss; }
+    public static void setCurWhtext(int wt) { curWhtext = wt; }
 
     // =========================================================================
     // Multi-Channel Adaptive Execution Engine
@@ -145,8 +170,8 @@ public class AdbClient {
         try {
             socket = new Socket();
             socket.setTcpNoDelay(true);
-            socket.setSoTimeout(3000);
-            socket.connect(new InetSocketAddress("127.0.0.1", 5555), 1500);
+            socket.setSoTimeout(1500);
+            socket.connect(new InetSocketAddress("127.0.0.1", 5555), 1000);
 
             OutputStream out = socket.getOutputStream();
             InputStream in = socket.getInputStream();
@@ -158,7 +183,13 @@ public class AdbClient {
 
             // Read CNXN response (24 bytes header)
             byte[] header = new byte[24];
-            readFully(in, header, 24);
+            try {
+                readFully(in, header, 24);
+            } catch (java.net.SocketTimeoutException te) {
+                // 该固件 adbd 仅允许一个 TCP 客户端，电脑端 adb 连着时会卡在握手
+                return "ERR: ADB_BUSY (5555 已被其它客户端占用，如电脑 adb connect)";
+            }
+            socket.setSoTimeout(3000);
 
             ByteBuffer bb = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN);
             int cnxnCmd = bb.getInt();
@@ -228,6 +259,10 @@ public class AdbClient {
         if (!forceRecheck && activeChannel != CHANNEL_UNKNOWN) {
             return activeChannel;
         }
+        // 探测失败后 10 秒内不再重复探测，避免每个请求都卡数秒
+        if (!forceRecheck && System.currentTimeMillis() - lastDetectFailTs < 10000) {
+            return CHANNEL_UNKNOWN;
+        }
 
         // 1. Try local standard su (Magisk / SuperSU / Open root)
         String res = execLocal(new String[]{"su", "-c", "id"});
@@ -287,7 +322,8 @@ public class AdbClient {
         }
 
         activeChannel = CHANNEL_UNKNOWN;
-        activeChannelDesc = "未找到可用提权通道 (本地su失败且ADB 5555未开启)";
+        activeChannelDesc = "未找到可用提权通道 (本地su失败，ADB 5555 未开启或被电脑端 adb 占用)";
+        lastDetectFailTs = System.currentTimeMillis();
         Log.w(TAG, "No working channel found!");
         return activeChannel;
     }
@@ -344,19 +380,140 @@ public class AdbClient {
     }
 
     // =========================================================================
+    // PQ 直写层：一次 root 解锁节点权限，之后 App 直接写 sysfs，不再依赖 ADB
+    // (该固件 adbd 只允许一个 TCP 客户端，电脑 adb 连着时 App 的 ADB 通道会被挡住)
+    // =========================================================================
+
+    private static final String VECM = "/sys/module/am_vecm/parameters/";
+    private static final String[] PQ_NODES = {
+            "/sys/class/video/zoom", "/sys/class/video/screen_mode",
+            "/sys/class/video/crop", "/sys/class/video/axis",
+            "/sys/class/video/contrast", "/sys/class/video/brightness",
+            "/sys/class/amvecm/brightness", "/sys/class/amvecm/contrast",
+            "/sys/class/amvecm/saturation_hue_pre", "/sys/class/amvecm/dnlp",
+            "/sys/class/amvecm/pq_user_set", "/sys/class/amhdmitx/amhdmitx0/attr",
+            VECM + "video_eotf_coeff", VECM + "reload_mtx", VECM + "reload_lut",
+            VECM + "ve_dnlp_set_bext", VECM + "vpp_dith_en", VECM + "vpp_dith_mode",
+            VECM + "hdr_mode", VECM + "knee_setting", VECM + "knee_interpolation_mode",
+            VECM + "knee_factor", VECM + "range_control", VECM + "sdr_saturation_offset",
+            VECM + "dnlp_en", VECM + "dnlp_en_2", VECM + "dnlp_adj_level",
+            VECM + "ve_dnlp_adj_level", VECM + "ve_dnlp_strength", VECM + "ve_dnlp_whtext",
+            VECM + "ve_dnlp_set_wext", VECM + "cm_en", VECM + "cm_level",
+            "/sys/module/di/parameters/nr10bit_surpport"
+    };
+    private static volatile boolean pqUnlocked = false;
+    private static long lastUnlockFailTs = 0;
+    private static String lastUnlockErr = "";
+
+    public static boolean isPqUnlocked() { return pqUnlocked; }
+    public static String getLastUnlockErr() { return lastUnlockErr; }
+
+    /** 以 uid=0 执行（优先已探测到的 root 通道，否则走 ADB + 斐讯 su 0），绝不使用 media 通道 */
+    public static String execRoot(String cmd) {
+        int ch = activeChannel;
+        if (ch == CHANNEL_LOCAL_SU || ch == CHANNEL_LOCAL_PHICOMM || ch == CHANNEL_ADB_DIRECT
+                || ch == CHANNEL_ADB_PHICOMM || ch == CHANNEL_ADB_SU_C) {
+            return execute(cmd);
+        }
+        return execAdbRaw("printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"" + cmd.replace("\"", "\\\"") + "\"");
+    }
+
+    private static boolean writeDirect(String path, String val) {
+        File f = new File(path);
+        if (!f.exists()) return true; // 节点不存在的固件直接跳过
+        java.io.FileOutputStream fos = null;
+        try {
+            fos = new java.io.FileOutputStream(f);
+            fos.write((val + "\n").getBytes("UTF-8"));
+            fos.flush();
+            return true;
+        } catch (Exception e) {
+            return false;
+        } finally {
+            if (fos != null) try { fos.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    private static boolean pqNodesWritable() {
+        for (String n : PQ_NODES) {
+            File f = new File(n);
+            if (f.exists() && !f.canWrite()) return false;
+        }
+        return true;
+    }
+
+    /** 通过 root 放开 PQ 节点写权限 (chmod 666 + setenforce 0)，重启后需重新执行 */
+    public static synchronized boolean unlockPqNodes() {
+        if (pqUnlocked && pqNodesWritable()) return true;
+        pqUnlocked = false;
+        if (pqNodesWritable()) { pqUnlocked = true; return true; }
+        if (System.currentTimeMillis() - lastUnlockFailTs < 5000) return false; // 失败冷却，避免每次请求都卡
+        StringBuilder sb = new StringBuilder("setenforce 0 2>/dev/null; ");
+        for (String n : PQ_NODES) sb.append("chmod 666 ").append(n).append(" 2>/dev/null; ");
+        sb.append("echo UNLOCK_DONE");
+        String r = execRoot(sb.toString());
+        // 斐讯 su 移除了 CAP_FOWNER，media 所有的 video 节点需由 uid=1013 (media) 解锁
+        File zoomFile = new File("/sys/class/video/zoom");
+        if (zoomFile.exists() && !zoomFile.canWrite()) {
+            execAdbRaw("printf \"31183118\\n\" | /system/xbin/su 1013:1000 sh -c \"chmod 666 /sys/class/video/zoom /sys/class/video/screen_mode /sys/class/video/axis 2>/dev/null; echo MEDIA_UNLOCK_DONE\"");
+        }
+        if (r.contains("UNLOCK_DONE") && pqNodesWritable()) {
+            pqUnlocked = true;
+            lastUnlockErr = "";
+            Log.i(TAG, "PQ & Zoom nodes unlocked, direct sysfs write enabled");
+            return true;
+        }
+        lastUnlockFailTs = System.currentTimeMillis();
+        lastUnlockErr = r.length() > 160 ? r.substring(0, 160) : r;
+        Log.w(TAG, "PQ unlock failed: " + lastUnlockErr);
+        return false;
+    }
+
+    /** 按 path,value,path,value... 顺序写入 PQ 节点；返回 OK 或 ERR:原因 */
+    public static synchronized String writePq(String... kv) {
+        if (directWriteAll(kv)) return "OK";
+        if (unlockPqNodes() && directWriteAll(kv)) return "OK";
+        // 兜底：整条命令走 root shell
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i + 1 < kv.length; i += 2) {
+            sb.append("echo ").append(kv[i + 1]).append(" > ").append(kv[i]).append("; ");
+        }
+        String r = execRoot(sb.toString());
+        if (r.startsWith("ERR")) {
+            Log.w(TAG, "writePq failed: " + r);
+            return r;
+        }
+        return "OK";
+    }
+
+    private static boolean directWriteAll(String[] kv) {
+        for (int i = 0; i + 1 < kv.length; i += 2) {
+            if (!writeDirect(kv[i], kv[i + 1])) return false;
+        }
+        return true;
+    }
+
+    // =========================================================================
     // Zoom and Video Control APIs with Direct Verification
     // =========================================================================
 
     public static String setZoom(int zoom) {
         curZoom = zoom;
-        // 1. Try standard execute write
-        execute("echo " + zoom + " > /sys/class/video/zoom");
+        // 1. 优先走直写/一次解锁通道
+        writePq("/sys/class/video/zoom", "" + zoom);
         String verify = readSysfs("/sys/class/video/zoom").trim();
         if (String.valueOf(zoom).equals(verify)) {
             return "OK:" + verify;
         }
 
-        // 2. If failed, attempt direct media su via ADB
+        // 2. Try standard execute write
+        execute("echo " + zoom + " > /sys/class/video/zoom");
+        verify = readSysfs("/sys/class/video/zoom").trim();
+        if (String.valueOf(zoom).equals(verify)) {
+            return "OK:" + verify;
+        }
+
+        // 3. If failed, attempt direct media su via ADB
         if (isAdbPortOpen()) {
             execAdbRaw("printf \"31183118\\n\" | /system/xbin/su 1013:1000 sh -c \"echo " + zoom + " > /sys/class/video/zoom\"");
             verify = readSysfs("/sys/class/video/zoom").trim();
@@ -366,7 +523,7 @@ public class AdbClient {
                 return "OK:" + verify;
             }
 
-            // 3. Attempt root su 0 via ADB
+            // 4. Attempt root su 0 via ADB
             execAdbRaw("printf \"31183118\\n\" | /system/xbin/su 0 sh -c \"echo " + zoom + " > /sys/class/video/zoom\"");
             verify = readSysfs("/sys/class/video/zoom").trim();
             if (String.valueOf(zoom).equals(verify)) {
@@ -390,8 +547,14 @@ public class AdbClient {
 
     public static String setScreenMode(int mode) {
         curMode = mode;
-        execute("echo " + mode + " > /sys/class/video/screen_mode");
+        writePq("/sys/class/video/screen_mode", "" + mode);
         String verify = readSysfs("/sys/class/video/screen_mode").trim();
+        if (isScreenModeMatched(verify, mode)) {
+            return "OK:" + verify;
+        }
+
+        execute("echo " + mode + " > /sys/class/video/screen_mode");
+        verify = readSysfs("/sys/class/video/screen_mode").trim();
         if (isScreenModeMatched(verify, mode)) {
             return "OK:" + verify;
         }
@@ -408,55 +571,160 @@ public class AdbClient {
         return "ERR: 模式写入未生效 (当前=" + verify + ", 期望=" + mode + ")";
     }
 
+    private static String res(String r, int val) {
+        return "OK".equals(r) ? "OK:" + val : r;
+    }
+
     public static String setBrightness(int val) {
         curBrightness = val;
-        execute("echo " + val + " > /sys/class/amvecm/brightness; echo " + val + " > /sys/class/video/brightness");
-        return "OK:" + val;
+        return res(writePq("/sys/class/amvecm/brightness", "" + val, "/sys/class/video/brightness", "" + val), val);
     }
 
     public static String setContrast(int val) {
         curContrast = val;
-        execute("echo " + val + " > /sys/class/video/contrast");
-        return "OK:" + val;
+        return res(writePq("/sys/class/video/contrast", "" + val), val);
+    }
+
+    public static String getEotfCoeff(int boostPct) {
+        if (boostPct <= 100) {
+            return "2048,0,0,0,2048,0,0,0,2048,1";
+        }
+        double factor = boostPct / 100.0;
+        int[] base = {2509, -461, 0, -86, 2134, 0, -40, -161, 2249};
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < base.length; i++) {
+            long val = Math.round(base[i] * factor);
+            sb.append(val).append(",");
+        }
+        sb.append("1");
+        return sb.toString();
+    }
+
+    public static void ensure10BitColorOutput() {
+        String cfg = readSysfs("/sys/class/amhdmitx/amhdmitx0/config");
+        if (!cfg.contains("cd = 5")) {
+            writePq("/sys/class/amhdmitx/amhdmitx0/attr", "420,10bit");
+            execAdbRaw("printf \"31183118\\n\" | /system/xbin/su 1000 sh -c \"echo 2160p60hz420 > /sys/class/display/mode\"");
+        }
+    }
+
+    public static String setEotf(int boostPct) {
+        curEotf = boostPct;
+        String coeff = getEotfCoeff(boostPct);
+        return res(writePq(VECM + "video_eotf_coeff", coeff, VECM + "reload_mtx", "1", VECM + "reload_lut", "1"), boostPct);
+    }
+
+    public static String setBext(int val) {
+        curBext = val;
+        return res(writePq(VECM + "ve_dnlp_set_bext", "" + val), val);
+    }
+
+    public static String setDither(int val) {
+        curDither = val;
+        return res(writePq(VECM + "vpp_dith_en", "" + val, VECM + "vpp_dith_mode", "0"), val);
+    }
+
+    public static String setNr10(int val) {
+        curNr10 = val;
+        return res(writePq("/sys/module/di/parameters/nr10bit_surpport", "" + val), val);
+    }
+
+    public static String setBt2390(int val) {
+        curBt2390 = val;
+        String r;
+        if (val == 1) {
+            curDnlp = 1; // BT.2390 套餐内会开启 DNLP，保持状态一致
+            ensure10BitColorOutput();
+            String knee = "0,16,46,76,107,137,168,198,228,306,388,444,489,529,565,599,630,660,688,714,740,765,789,812,834,856,877,898,919,938,958,977,996,1014,1023";
+            r = writePq(
+                    VECM + "hdr_mode", "1",
+                    VECM + "knee_setting", knee,
+                    VECM + "knee_interpolation_mode", "1",
+                    VECM + "knee_factor", "" + curKneeFactor,
+                    VECM + "range_control", "0",
+                    VECM + "sdr_saturation_offset", "" + curSdrSat,
+                    "/sys/class/amvecm/dnlp", "0x1",
+                    VECM + "dnlp_en", "1",
+                    VECM + "dnlp_en_2", "1",
+                    VECM + "dnlp_adj_level", "8",
+                    VECM + "ve_dnlp_adj_level", "8",
+                    VECM + "ve_dnlp_strength", "255",
+                    VECM + "ve_dnlp_whtext", "" + curWhtext,
+                    VECM + "ve_dnlp_set_wext", "1",
+                    "/sys/class/amvecm/pq_user_set", "blk_ext_en",
+                    VECM + "ve_dnlp_set_bext", "" + curBext,
+                    VECM + "vpp_dith_en", "" + curDither,
+                    "/sys/module/di/parameters/nr10bit_surpport", "" + curNr10,
+                    VECM + "video_eotf_coeff", getEotfCoeff(curEotf),
+                    VECM + "reload_lut", "1",
+                    VECM + "reload_mtx", "1",
+                    "/sys/class/video/contrast", "" + curContrast);
+        } else {
+            r = writePq(
+                    VECM + "hdr_mode", "2",
+                    VECM + "knee_factor", "0",
+                    VECM + "ve_dnlp_set_bext", "0",
+                    "/sys/class/video/contrast", "0",
+                    VECM + "reload_lut", "1");
+        }
+        return res(r, val);
+    }
+
+    /** 曲线介入强度 knee_factor (0 ~ 256) */
+    public static String setKneeFactor(int val) {
+        curKneeFactor = val;
+        return res(writePq(VECM + "knee_factor", "" + val, VECM + "reload_lut", "1"), val);
+    }
+
+    /** HDR 广色域转 SDR 饱和度补偿 sdr_saturation_offset (0 ~ 100) */
+    public static String setSdrSat(int val) {
+        curSdrSat = val;
+        return res(writePq(VECM + "sdr_saturation_offset", "" + val, VECM + "reload_mtx", "1", VECM + "reload_lut", "1"), val);
+    }
+
+    /** 白场高光动态拉伸 ve_dnlp_whtext (0 ~ 64) */
+    public static String setWhtext(int val) {
+        curWhtext = val;
+        return res(writePq(VECM + "ve_dnlp_whtext", "" + val, VECM + "ve_dnlp_set_wext", "1"), val);
     }
 
     public static String setSaturation(int val) {
         curSaturation = val;
-        execute("echo " + curSaturation + " " + curHue + " > /sys/class/amvecm/saturation_hue_pre");
-        return "OK:" + val;
+        return res(writePq("/sys/class/amvecm/saturation_hue_pre", curSaturation + " " + curHue), val);
     }
 
     public static String setHue(int val) {
         curHue = val;
-        execute("echo " + curSaturation + " " + curHue + " > /sys/class/amvecm/saturation_hue_pre");
-        return "OK:" + val;
+        return res(writePq("/sys/class/amvecm/saturation_hue_pre", curSaturation + " " + curHue), val);
     }
 
     public static String setCm(int val) {
-        curCm = val;
-        if (val == 1) {
-            execute("echo 1 > /sys/module/am_vecm/parameters/cm_en; echo 1 > /sys/module/am_vecm/parameters/cm_level");
-        } else {
-            execute("echo 0 > /sys/module/am_vecm/parameters/cm_en");
+        if (val >= 1 && val <= 3) {
+            curCm = val;
+            return res(writePq(VECM + "cm_en", "1", VECM + "cm_level", "" + val), val);
         }
-        return "OK:" + val;
+        curCm = 0;
+        return res(writePq(VECM + "cm_en", "0"), 0);
     }
 
     public static String setDnlp(int val) {
         curDnlp = val;
         if (val == 1) {
-            execute("echo 0x1 > /sys/class/amvecm/dnlp; echo 1 > /sys/module/am_vecm/parameters/dnlp_en; echo 1 > /sys/module/am_vecm/parameters/dnlp_en_2; echo 8 > /sys/module/am_vecm/parameters/dnlp_adj_level; echo 8 > /sys/module/am_vecm/parameters/ve_dnlp_adj_level; echo 255 > /sys/module/am_vecm/parameters/ve_dnlp_strength; echo blk_ext_en > /sys/class/amvecm/pq_user_set");
-        } else {
-            execute("echo 0x0 > /sys/class/amvecm/dnlp; echo 0 > /sys/module/am_vecm/parameters/dnlp_en; echo 0 > /sys/module/am_vecm/parameters/dnlp_en_2; echo blk_ext_dis > /sys/class/amvecm/pq_user_set");
+            return res(writePq("/sys/class/amvecm/dnlp", "0x1", VECM + "dnlp_en", "1", VECM + "dnlp_en_2", "1",
+                    VECM + "dnlp_adj_level", "8", VECM + "ve_dnlp_adj_level", "8", VECM + "ve_dnlp_strength", "255",
+                    "/sys/class/amvecm/pq_user_set", "blk_ext_en"), val);
         }
-        return "OK:" + val;
+        return res(writePq("/sys/class/amvecm/dnlp", "0x0", VECM + "dnlp_en", "0", VECM + "dnlp_en_2", "0",
+                "/sys/class/amvecm/pq_user_set", "blk_ext_dis"), val);
     }
 
     public static String resetAll() {
         curZoom = 100;
         curMode = 0;
-        setZoom(100);
-        execute("echo 0 > /sys/class/video/screen_mode; echo 0 0 0 0 > /sys/class/video/crop");
+        String zr = setZoom(100);
+        String mr = writePq("/sys/class/video/screen_mode", "0", "/sys/class/video/crop", "0 0 0 0");
+        if (!zr.startsWith("OK")) return zr;
+        if (!"OK".equals(mr)) return mr;
         return "OK:resetAll";
     }
 
@@ -467,8 +735,11 @@ public class AdbClient {
         curHue = 0;
         curDnlp = 0;
         curCm = 0;
-        execute("echo 0 > /sys/class/amvecm/brightness; echo 0 > /sys/class/video/brightness; echo 0 > /sys/class/video/contrast; echo 0 > /sys/class/amvecm/contrast; echo 0 0 > /sys/class/amvecm/saturation_hue_pre; echo 0x0 > /sys/class/amvecm/dnlp; echo 0 > /sys/module/am_vecm/parameters/dnlp_en; echo 0 > /sys/module/am_vecm/parameters/dnlp_en_2; echo blk_ext_dis > /sys/class/amvecm/pq_user_set; echo 0 > /sys/module/am_vecm/parameters/cm_en");
-        return "OK:resetAllPq";
+        return res(writePq("/sys/class/amvecm/brightness", "0", "/sys/class/video/brightness", "0",
+                "/sys/class/video/contrast", "0", "/sys/class/amvecm/contrast", "0",
+                "/sys/class/amvecm/saturation_hue_pre", "0 0", "/sys/class/amvecm/dnlp", "0x0",
+                VECM + "dnlp_en", "0", VECM + "dnlp_en_2", "0",
+                "/sys/class/amvecm/pq_user_set", "blk_ext_dis", VECM + "cm_en", "0"), 0);
     }
 
     public static void initPqValues() {
@@ -492,7 +763,57 @@ public class AdbClient {
         } catch (Exception ignored) {}
         try {
             String cm = readSysfs("/sys/module/am_vecm/parameters/cm_en");
-            if (!cm.isEmpty()) curCm = Integer.parseInt(cm);
+            if ("1".equals(cm)) {
+                String lvl = readSysfs("/sys/module/am_vecm/parameters/cm_level");
+                int lv = (!lvl.isEmpty()) ? Integer.parseInt(lvl) : 1;
+                curCm = (lv >= 1 && lv <= 3) ? lv : 1;
+            } else if ("0".equals(cm)) {
+                curCm = 0;
+            }
+        } catch (Exception ignored) {}
+        try {
+            String e = readSysfs("/sys/module/am_vecm/parameters/video_eotf_coeff");
+            if (e.contains("2760")) curEotf = 110;
+            else if (e.contains("2634")) curEotf = 105;
+            else if (e.contains("2885")) curEotf = 115;
+            else if (e.contains("3136")) curEotf = 125;
+            else if (e.contains("2048")) curEotf = 100;
+        } catch (Exception ignored) {}
+        try {
+            String bx = readSysfs("/sys/module/am_vecm/parameters/ve_dnlp_set_bext");
+            if (!bx.isEmpty()) curBext = Integer.parseInt(bx);
+        } catch (Exception ignored) {}
+        try {
+            String dit = readSysfs("/sys/module/am_vecm/parameters/vpp_dith_en");
+            if (!dit.isEmpty()) curDither = Integer.parseInt(dit);
+        } catch (Exception ignored) {}
+        try {
+            String nr = readSysfs("/sys/module/di/parameters/nr10bit_surpport");
+            if (!nr.isEmpty()) curNr10 = Integer.parseInt(nr);
+        } catch (Exception ignored) {}
+        try {
+            String kf = readSysfs("/sys/module/am_vecm/parameters/knee_factor");
+            if (!kf.isEmpty()) {
+                int kfv = Integer.parseInt(kf.trim());
+                if (kfv > 0) {
+                    curBt2390 = 1;
+                    curKneeFactor = kfv;
+                } else {
+                    curBt2390 = 0;
+                }
+            }
+        } catch (Exception ignored) {}
+        try {
+            String ssat = readSysfs("/sys/module/am_vecm/parameters/sdr_saturation_offset");
+            if (!ssat.isEmpty()) curSdrSat = Integer.parseInt(ssat.trim());
+        } catch (Exception ignored) {}
+        try {
+            String wext = readSysfs("/sys/module/am_vecm/parameters/ve_dnlp_whtext");
+            if (!wext.isEmpty()) curWhtext = Integer.parseInt(wext.trim());
+        } catch (Exception ignored) {}
+        try {
+            String z = readSysfs("/sys/class/video/zoom");
+            if (!z.isEmpty()) curZoom = Integer.parseInt(z);
         } catch (Exception ignored) {}
         try {
             String m = readSysfs("/sys/class/video/screen_mode");

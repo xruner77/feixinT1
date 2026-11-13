@@ -122,6 +122,8 @@ def build_and_deploy(target_ip="192.168.123.98"):
                 print("Install output:", res.stdout.strip(), res.stderr.strip())
                 subprocess.run([ADB, "-s", f"{target_ip}:5555", "shell", "am start -n com.phicomm.t1zoom/.MainActivity"], capture_output=True, timeout=5)
                 print("Service restarted.")
+                subprocess.run([ADB, "disconnect", f"{target_ip}:5555"], capture_output=True, timeout=5)
+                print("Disconnected PC adb to keep box 5555 port free for the app.")
             else:
                 print(f"[*] 设备 {target_ip} 未连接或离线，跳过自动推送。APK 已就绪：{out_apk}")
         except Exception as e:

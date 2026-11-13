@@ -1,7 +1,7 @@
 import subprocess
 
 def verify():
-    cmd = """
+    cmd = """echo 31183118 | su 0 sh -c '
 cat /sys/class/amhdmitx/amhdmitx0/config
 echo "---SPLIT---"
 cat /sys/class/amhdmitx/amhdmitx0/attr
@@ -13,7 +13,7 @@ echo "---SPLIT---"
 cat /sys/class/amvecm/dnlp
 echo "---SPLIT---"
 cat /sys/module/am_vecm/parameters/range_control
-"""
+'"""
     subprocess.run(["d:\\tools\\adb\\adb.exe", "connect", "192.168.123.98:5555"], capture_output=True)
     res = subprocess.run(["d:\\tools\\adb\\adb.exe", "-s", "192.168.123.98:5555", "shell", cmd],
                          capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=5)
