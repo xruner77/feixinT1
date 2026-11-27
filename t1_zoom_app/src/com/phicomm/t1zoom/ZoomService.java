@@ -55,13 +55,13 @@ public class ZoomService extends Service {
             final int h = prefs.getInt("hue", 0);
             final int d = prefs.getInt("dnlp", 1);
             final int cm = prefs.getInt("cm", 1);
-            final int eotf = prefs.getInt("eotf", 110);
+            final int eotf = Math.min(250, prefs.getInt("eotf", 110));
             final int bext = prefs.getInt("bext", 8);
             final int dither = prefs.getInt("dither", 1);
             final int nr10 = prefs.getInt("nr10", 1);
             final int bt2390 = prefs.getInt("bt2390", 1);
-            final int kfactor = prefs.getInt("kfactor", 256);
-            final int sdrsat = prefs.getInt("sdrsat", 50);
+            final int kfactor = prefs.getInt("kfactor_v2", 0);
+            final int sdrsat = prefs.getInt("sdrsat_v2", 25);
             final int whtext = prefs.getInt("whtext", 16);
 
             // Pre-set in-memory tracking so status API is instantly accurate
@@ -362,12 +362,12 @@ public class ZoomService extends Service {
                             } else if ("kfactor".equals(type) && valStr != null) {
                                 int val = Integer.parseInt(valStr);
                                 String r = AdbClient.setKneeFactor(val);
-                                savePqPref("kfactor", val);
+                                savePqPref("kfactor_v2", val);
                                 sendPqResult(out, "kfactor", val, r);
                             } else if ("sdrsat".equals(type) && valStr != null) {
                                 int val = Integer.parseInt(valStr);
                                 String r = AdbClient.setSdrSat(val);
-                                savePqPref("sdrsat", val);
+                                savePqPref("sdrsat_v2", val);
                                 sendPqResult(out, "sdrsat", val, r);
                             } else if ("whtext".equals(type) && valStr != null) {
                                 int val = Integer.parseInt(valStr);
@@ -566,36 +566,36 @@ public class ZoomService extends Service {
         sb.append("<div class=\"pq-item\" style=\"margin-top:14px;\"><div class=\"pq-header\"><span class=\"pq-label\">✨ 高光动态爆发 (Highlight Boost)</span><div class=\"pq-controls\"><span id=\"val-eotf\" class=\"val-badge\">1.10x</span><button class=\"btn-rst\" onclick=\"setEotfPreset(110)\">↺ 黄金1.1x</button></div></div>");
         sb.append("<div class=\"pill-grid\">");
         sb.append("<button class=\"btn-pill\" id=\"pill-eotf-100\" onclick=\"setEotfPreset(100)\">1.00x 标准</button>");
-        sb.append("<button class=\"btn-pill\" id=\"pill-eotf-105\" onclick=\"setEotfPreset(105)\">1.05x 温和</button>");
         sb.append("<button class=\"btn-pill active\" id=\"pill-eotf-110\" onclick=\"setEotfPreset(110)\">1.10x 推荐</button>");
-        sb.append("<button class=\"btn-pill\" id=\"pill-eotf-115\" onclick=\"setEotfPreset(115)\">1.15x 极亮</button>");
+        sb.append("<button class=\"btn-pill\" id=\"pill-eotf-150\" onclick=\"setEotfPreset(150)\">1.50x 强力</button>");
+        sb.append("<button class=\"btn-pill\" id=\"pill-eotf-250\" onclick=\"setEotfPreset(250)\">2.50x 狂暴</button>");
         sb.append("</div>");
-        sb.append("<input type=\"range\" id=\"range-eotf\" min=\"100\" max=\"125\" value=\"110\" step=\"1\" oninput=\"onSlideEotf(this.value)\">");
-        sb.append("<div class=\"range-labels\"><span>1.00x (原盘)</span><span>1.10x (黄金推荐)</span><span>1.25x (超强)</span></div></div>");
+        sb.append("<input type=\"range\" id=\"range-eotf\" min=\"100\" max=\"250\" value=\"110\" step=\"1\" oninput=\"onSlideEotf(this.value)\">");
+        sb.append("<div class=\"range-labels\"><span>1.00x (原盘)</span><span>1.75x (强力)</span><span>2.50x (极限爆发)</span></div></div>");
 
         // Black Extension Slider & Pills
         sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">🌑 暗场黑位沉底 (Black Extension)</span><div class=\"pq-controls\"><span id=\"val-bext\" class=\"val-badge\">8</span><button class=\"btn-rst\" onclick=\"setBextPreset(8)\">↺ 默认 8</button></div></div>");
         sb.append("<div class=\"pill-grid\">");
         sb.append("<button class=\"btn-pill\" id=\"pill-bext-0\" onclick=\"setBextPreset(0)\">0 原生</button>");
         sb.append("<button class=\"btn-pill active\" id=\"pill-bext-8\" onclick=\"setBextPreset(8)\">8 推荐</button>");
-        sb.append("<button class=\"btn-pill\" id=\"pill-bext-16\" onclick=\"setBextPreset(16)\">16 纯黑</button>");
-        sb.append("<button class=\"btn-pill\" id=\"pill-bext-24\" onclick=\"setBextPreset(24)\">24 极黑</button>");
+        sb.append("<button class=\"btn-pill\" id=\"pill-bext-24\" onclick=\"setBextPreset(24)\">24 深邃</button>");
+        sb.append("<button class=\"btn-pill\" id=\"pill-bext-48\" onclick=\"setBextPreset(48)\">48 极黑</button>");
         sb.append("</div>");
-        sb.append("<input type=\"range\" id=\"range-bext\" min=\"0\" max=\"24\" value=\"8\" step=\"2\" oninput=\"onSlideBext(this.value)\">");
-        sb.append("<div class=\"range-labels\"><span>0 (关闭下潜)</span><span>8 (保细节下潜)</span><span>24 (极致纯黑)</span></div></div>");
+        sb.append("<input type=\"range\" id=\"range-bext\" min=\"0\" max=\"48\" value=\"8\" step=\"1\" oninput=\"onSlideBext(this.value)\">");
+        sb.append("<div class=\"range-labels\"><span>0 (关闭下潜)</span><span>24 (深邃纯黑)</span><span>48 (极限压黑)</span></div></div>");
 
         // BT.2390 Custom Fine-Tuning Sliders
-        sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">📐 曲线介入强度 (knee_factor)</span><div class=\"pq-controls\"><span id=\"val-kfactor\" class=\"val-badge\">256</span><button class=\"btn-rst\" onclick=\"setHdrParam('kfactor', 256)\">↺ 默认 256</button></div></div>");
-        sb.append("<input type=\"range\" id=\"range-kfactor\" min=\"0\" max=\"256\" value=\"256\" step=\"1\" oninput=\"onSlideHdr('kfactor', this.value)\">");
-        sb.append("<div class=\"range-labels\"><span>0 (线性无压缩)</span><span>128 (半幅混合)</span><span>256 (100% 满血曲线)</span></div></div>");
+        sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">📐 曲线介入强度 (knee_factor)</span><div class=\"pq-controls\"><span id=\"val-kfactor\" class=\"val-badge\">0</span><button class=\"btn-rst\" onclick=\"setHdrParam('kfactor', 0)\">↺ 默认 0</button></div></div>");
+        sb.append("<input type=\"range\" id=\"range-kfactor\" min=\"0\" max=\"256\" value=\"0\" step=\"1\" oninput=\"onSlideHdr('kfactor', this.value)\">");
+        sb.append("<div class=\"range-labels\"><span>0 (默认线性)</span><span>128 (适中融合)</span><span>256 (满血BT.2390)</span></div></div>");
 
-        sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">🎨 HDR➔SDR 饱和度补偿</span><div class=\"pq-controls\"><span id=\"val-sdrsat\" class=\"val-badge\">50</span><button class=\"btn-rst\" onclick=\"setHdrParam('sdrsat', 50)\">↺ 默认 50</button></div></div>");
-        sb.append("<input type=\"range\" id=\"range-sdrsat\" min=\"0\" max=\"100\" value=\"50\" step=\"1\" oninput=\"onSlideHdr('sdrsat', this.value)\">");
-        sb.append("<div class=\"range-labels\"><span>0 (无补偿)</span><span>50 (标准补偿)</span><span>100 (浓烈高饱)</span></div></div>");
+        sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">🎨 HDR➔SDR 饱和度补偿</span><div class=\"pq-controls\"><span id=\"val-sdrsat\" class=\"val-badge\">25</span><button class=\"btn-rst\" onclick=\"setHdrParam('sdrsat', 25)\">↺ 默认 25</button></div></div>");
+        sb.append("<input type=\"range\" id=\"range-sdrsat\" min=\"0\" max=\"100\" value=\"25\" step=\"1\" oninput=\"onSlideHdr('sdrsat', this.value)\">");
+        sb.append("<div class=\"range-labels\"><span>0 (无补偿)</span><span>25 (默认补偿)</span><span>100 (浓郁艳丽)</span></div></div>");
 
         sb.append("<div class=\"pq-item\"><div class=\"pq-header\"><span class=\"pq-label\">☀️ 白场高光动态拉伸</span><div class=\"pq-controls\"><span id=\"val-whtext\" class=\"val-badge\">16</span><button class=\"btn-rst\" onclick=\"setHdrParam('whtext', 16)\">↺ 默认 16</button></div></div>");
-        sb.append("<input type=\"range\" id=\"range-whtext\" min=\"0\" max=\"64\" value=\"16\" step=\"1\" oninput=\"onSlideHdr('whtext', this.value)\">");
-        sb.append("<div class=\"range-labels\"><span>0 (关闭拉伸)</span><span>16 (黄金推荐)</span><span>64 (极限提亮)</span></div></div>");
+        sb.append("<input type=\"range\" id=\"range-whtext\" min=\"0\" max=\"128\" value=\"16\" step=\"1\" oninput=\"onSlideHdr('whtext', this.value)\">");
+        sb.append("<div class=\"range-labels\"><span>0 (关闭拉伸)</span><span>16 (黄金推荐)</span><span>128 (极限提亮)</span></div></div>");
 
         // VPP Dither & 10bit NR Grid
         sb.append("<div class=\"btn-grid\" style=\"margin-top:10px;\">");

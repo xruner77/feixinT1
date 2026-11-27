@@ -56,9 +56,9 @@ public class AdbClient {
     private static int curDither = 1;
     private static int curNr10 = 1;
     private static int curBt2390 = 1;
-    private static int curKneeFactor = 256; // 0 to 256
-    private static int curSdrSat = 50;      // 0 to 100
-    private static int curWhtext = 16;      // 0 to 64
+    private static int curKneeFactor = 0;   // 0 to 256
+    private static int curSdrSat = 25;      // 0 to 100
+    private static int curWhtext = 16;      // 0 to 128
 
     public static int getCurZoom() { return curZoom; }
     public static int getCurMode() { return curMode; }
@@ -392,13 +392,16 @@ public class AdbClient {
             "/sys/class/amvecm/brightness", "/sys/class/amvecm/contrast",
             "/sys/class/amvecm/saturation_hue_pre", "/sys/class/amvecm/dnlp",
             "/sys/class/amvecm/pq_user_set", "/sys/class/amhdmitx/amhdmitx0/attr",
-            VECM + "video_eotf_coeff", VECM + "reload_mtx", VECM + "reload_lut",
-            VECM + "ve_dnlp_set_bext", VECM + "vpp_dith_en", VECM + "vpp_dith_mode",
+            VECM + "video_eotf_coeff", VECM + "display_scale_factor", VECM + "reload_mtx", VECM + "reload_lut",
+            VECM + "ve_dnlp_set_bext", VECM + "ve_dnlp_blkext", VECM + "ve_dnlp_method", VECM + "dnlp_respond",
+            VECM + "vpp_dith_en", VECM + "vpp_dith_mode",
             VECM + "hdr_mode", VECM + "knee_setting", VECM + "knee_interpolation_mode",
             VECM + "knee_factor", VECM + "range_control", VECM + "sdr_saturation_offset",
             VECM + "dnlp_en", VECM + "dnlp_en_2", VECM + "dnlp_adj_level",
             VECM + "ve_dnlp_adj_level", VECM + "ve_dnlp_strength", VECM + "ve_dnlp_whtext",
             VECM + "ve_dnlp_set_wext", VECM + "cm_en", VECM + "cm_level",
+            VECM + "video_oetf_r_mapping", VECM + "video_oetf_g_mapping", VECM + "video_oetf_b_mapping",
+            VECM + "hdr_flag", VECM + "extra_sat_lut",
             "/sys/module/di/parameters/nr10bit_surpport"
     };
     private static volatile boolean pqUnlocked = false;
@@ -585,18 +588,227 @@ public class AdbClient {
         return res(writePq("/sys/class/video/contrast", "" + val), val);
     }
 
-    public static String getEotfCoeff(int boostPct) {
-        if (boostPct <= 100) {
-            return "2048,0,0,0,2048,0,0,0,2048,1";
+    private static final int[] KNEE_LINEAR = {
+            0, 16, 47, 78, 109, 140, 171, 202, 233, 264, 295, 326,
+            357, 388, 419, 450, 481, 512, 543, 574, 605, 636, 667, 698,
+            729, 760, 791, 822, 853, 884, 915, 946, 977, 1008, 1023
+    };
+
+    private static final int[] KNEE_BT2390 = {
+            0, 16, 46, 76, 107, 137, 168, 198, 228, 306, 388, 444,
+            489, 529, 565, 599, 630, 660, 688, 714, 740, 765, 789, 812,
+            834, 856, 877, 898, 919, 938, 958, 977, 996, 1014, 1023
+    };
+
+    private static final int[] CUBIC_COEF = {
+            0, 256, 0, 0,
+            -2, 256, 2, 0,
+            -4, 256, 4, 0,
+            -5, 254, 7, 0,
+            -7, 254, 10, -1,
+            -8, 252, 13, -1,
+            -10, 251, 16, -1,
+            -11, 249, 19, -1,
+            -12, 247, 23, -2,
+            -13, 244, 27, -2,
+            -14, 242, 31, -3,
+            -15, 239, 35, -3,
+            -16, 236, 40, -4,
+            -17, 233, 44, -4,
+            -17, 229, 49, -5,
+            -18, 226, 53, -5,
+            -18, 222, 58, -6,
+            -18, 218, 63, -7,
+            -19, 214, 68, -7,
+            -19, 210, 73, -8,
+            -19, 205, 79, -9,
+            -19, 201, 83, -9,
+            -19, 196, 89, -10,
+            -19, 191, 94, -10,
+            -19, 186, 100, -11,
+            -18, 181, 105, -12,
+            -18, 176, 111, -13,
+            -18, 171, 116, -13,
+            -18, 166, 122, -14,
+            -17, 160, 127, -14,
+            -17, 155, 133, -15,
+            -16, 149, 138, -15,
+            -16, 144, 144, -16
+    };
+
+    private static final int[] OETF_289_GAMMA22 = {
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 125, 171, 206, 235, 259, 281, 302,
+            321, 339, 356, 371, 386, 401, 414, 427,
+            440, 453, 465, 476, 488, 498, 509, 519,
+            529, 539, 549, 558, 568, 577, 586, 595,
+            603, 612, 620, 628, 637, 645, 652, 660,
+            668, 675, 683, 690, 697, 705, 712, 719,
+            726, 733, 740, 748, 755, 763, 771, 778,
+            786, 793, 801, 808, 814, 821, 827, 832,
+            837, 842, 846, 849, 852, 854, 856, 858,
+            860, 862, 864, 866, 867, 869, 871, 873,
+            875, 877, 879, 880, 882, 884, 886, 887,
+            889, 891, 893, 894, 896, 898, 899, 901,
+            902, 904, 906, 907, 909, 910, 912, 914,
+            915, 917, 918, 920, 921, 923, 924, 925,
+            927, 928, 930, 931, 933, 934, 935, 937,
+            938, 939, 941, 942, 943, 945, 946, 947,
+            948, 950, 951, 952, 953, 954, 956, 957,
+            958, 959, 960, 961, 962, 963, 965, 966,
+            967, 968, 969, 970, 971, 972, 973, 974,
+            975, 976, 977, 978, 979, 980, 981, 981,
+            982, 983, 984, 985, 986, 987, 987, 988,
+            989, 990, 991, 991, 992, 993, 994, 995,
+            995, 996, 997, 997, 998, 999, 999, 1000,
+            1001, 1001, 1002, 1003, 1003, 1004, 1004, 1005,
+            1006, 1006, 1007, 1007, 1008, 1008, 1009, 1009,
+            1010, 1010, 1011, 1011, 1012, 1012, 1012, 1013,
+            1013, 1014, 1014, 1015, 1015, 1015, 1016, 1016,
+            1016, 1017, 1017, 1017, 1018, 1018, 1018, 1019,
+            1019, 1019, 1019, 1020, 1020, 1020, 1020, 1020,
+            1021, 1021, 1021, 1021, 1021, 1022, 1022, 1022,
+            1022, 1022, 1022, 1022, 1022, 1023, 1023, 1023,
+            1023, 1023, 1023, 1023, 1023, 1023, 1023, 1023,
+            1023, 1023, 1023, 1023, 1023, 1023, 1023, 1023,
+            1023, 1023, 1023, 1023, 1023, 1023, 1023, 1023,
+            1023
+    };
+
+    private static int clipInt(int v, int min, int max) {
+        return (v > max) ? max : ((v < min) ? min : v);
+    }
+
+    private static int cubicInterp(int y0, int y1, int y2, int y3, int mu) {
+        int c0, c1, c2, c3;
+        int d0, d1, d2, d3;
+        if (mu <= 32) {
+            int base = mu << 2;
+            c0 = CUBIC_COEF[base];
+            c1 = CUBIC_COEF[base + 1];
+            c2 = CUBIC_COEF[base + 2];
+            c3 = CUBIC_COEF[base + 3];
+            d0 = y0; d1 = y1; d2 = y2; d3 = y3;
+        } else {
+            int base = (64 - mu) << 2;
+            c0 = CUBIC_COEF[base];
+            c1 = CUBIC_COEF[base + 1];
+            c2 = CUBIC_COEF[base + 2];
+            c3 = CUBIC_COEF[base + 3];
+            d0 = y3; d1 = y2; d2 = y1; d3 = y0;
         }
+        return (d0 * c0 + d1 * c1 + d2 * c2 + d3 * c3 + 128) >> 8;
+    }
+
+    private static boolean isHdrSignal() {
+        try {
+            String sigStr = readSysfs(VECM + "cur_signal_type").trim();
+            if (!sigStr.isEmpty()) {
+                long sig = Long.parseLong(sigStr);
+                int primaries = (int) ((sig >> 16) & 0xff);
+                int transfer = (int) ((sig >> 8) & 0xff);
+                return (primaries == 9 || transfer == 16)
+                        && (transfer == 16 || transfer == 14 || transfer == 18);
+            }
+        } catch (Exception ignored) {}
+        try {
+            String s = readSysfs(VECM + "cur_csc_type").trim();
+            if (!s.isEmpty()) {
+                int csc = Integer.parseInt(s);
+                return csc >= 64 && csc < 65535;
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    private static int[] buildKnee289Array(int kneeFactor, int eotfBoostPct, int bext, int whtext) {
+        int kf = clipInt(kneeFactor, 0, 256);
+        int bx = clipInt(bext, 0, 48);
+        int wx = clipInt(whtext, 0, 128);
+        int[] finalKnee = new int[35];
+        for (int i = 0; i < 35; i++) {
+            double v = KNEE_LINEAR[i] + (((KNEE_BT2390[i] - KNEE_LINEAR[i]) * kf) / 256.0);
+            if (eotfBoostPct > 100 && i >= 1) {
+                double boostGain = 1.0 + (eotfBoostPct - 100) / 300.0;
+                v = 16.0 + (v - 16.0) * boostGain;
+            }
+            if (wx > 0 && v > 384.0) {
+                double t = (v - 384.0) / (1023.0 - 384.0);
+                v += wx * 1.5 * t;
+            }
+            if (bx > 0 && i >= 1 && v < 512.0) {
+                double s = (512.0 - v) / 512.0;
+                v -= (bx * 2.5) * s * s;
+            }
+            finalKnee[i] = clipInt((int) Math.round(v), 0, 1023);
+        }
+        int[] lut = new int[289];
+        for (int i = 0; i < 16; i++) {
+            int v = finalKnee[0] + (((finalKnee[1] - finalKnee[0]) * i) >> 4);
+            lut[i] = clipInt(v, 0, 1023);
+        }
+        for (int i = 16; i < 272; i++) {
+            int k = 1 + ((i - 16) >> 3);
+            int mu = ((i - 16) & 0x7) << 3;
+            int v = cubicInterp(finalKnee[k - 1], finalKnee[k], finalKnee[k + 1], finalKnee[k + 2], mu);
+            lut[i] = clipInt(v, 0, 1023);
+        }
+        for (int i = 272; i < 289; i++) {
+            int v = finalKnee[33] + (((finalKnee[34] - finalKnee[33]) * (i - 272)) >> 4);
+            lut[i] = clipInt(v, 0, 1023);
+        }
+        if (kf == 0 && eotfBoostPct <= 100 && bx == 0 && wx == 0) {
+            lut[144] = 512;
+        }
+        return lut;
+    }
+
+    private static String formatLut289(int[] lut) {
+        StringBuilder sb = new StringBuilder(lut.length * 4);
+        for (int i = 0; i < lut.length; i++) {
+            if (i > 0) sb.append(',');
+            sb.append(lut[i]);
+        }
+        return sb.toString();
+    }
+
+    private static String applyOetfLut(int kneeFactor, int eotfBoostPct, int bext, int whtext) {
+        int[] knee289 = buildKnee289Array(kneeFactor, eotfBoostPct, bext, whtext);
+        int[] mapped = new int[289];
+        for (int i = 0; i < 289; i++) {
+            int v = OETF_289_GAMMA22[i];
+            int idx = clipInt(16 + ((v * 256) / 1023), 0, 288);
+            mapped[i] = knee289[idx];
+        }
+        String hdrLut = formatLut289(mapped);
+        if (curBt2390 == 1 && isHdrSignal()) {
+            return writePq(
+                    VECM + "video_oetf_r_mapping", hdrLut,
+                    VECM + "video_oetf_g_mapping", hdrLut,
+                    VECM + "video_oetf_b_mapping", hdrLut,
+                    VECM + "knee_factor", "" + kneeFactor,
+                    VECM + "reload_lut", "8");
+        }
+        return writePq(
+                VECM + "video_oetf_r_mapping", hdrLut,
+                VECM + "video_oetf_g_mapping", hdrLut,
+                VECM + "video_oetf_b_mapping", hdrLut,
+                VECM + "knee_factor", "" + kneeFactor);
+    }
+
+    public static String getEotfCoeff(int boostPct) {
+        boostPct = clipInt(boostPct, 100, 250);
         double factor = boostPct / 100.0;
         int[] base = {2509, -461, 0, -86, 2134, 0, -40, -161, 2249};
+        int rs = (boostPct > 150) ? 0 : 1;
+        double scale = (rs == 0) ? (factor / 2.0) : factor;
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < base.length; i++) {
-            long val = Math.round(base[i] * factor);
+            int val = clipInt((int) Math.round(base[i] * scale), -4095, 4095);
             sb.append(val).append(",");
         }
-        sb.append("1");
+        sb.append(rs);
         return sb.toString();
     }
 
@@ -609,14 +821,34 @@ public class AdbClient {
     }
 
     public static String setEotf(int boostPct) {
+        boostPct = clipInt(boostPct, 100, 250);
         curEotf = boostPct;
         String coeff = getEotfCoeff(boostPct);
-        return res(writePq(VECM + "video_eotf_coeff", coeff, VECM + "reload_mtx", "1", VECM + "reload_lut", "1"), boostPct);
+        String r;
+        if (curBt2390 == 1 && isHdrSignal()) {
+            r = writePq(VECM + "display_scale_factor", "2048", VECM + "video_eotf_coeff", coeff, VECM + "reload_mtx", "16");
+        } else {
+            r = writePq(VECM + "display_scale_factor", "2048", VECM + "video_eotf_coeff", coeff);
+        }
+        if (curBt2390 == 1) {
+            String lr = applyOetfLut(curKneeFactor, curEotf, curBext, curWhtext);
+            if (!"OK".equals(lr)) r = lr;
+        }
+        return res(r, boostPct);
     }
 
     public static String setBext(int val) {
         curBext = val;
-        return res(writePq(VECM + "ve_dnlp_set_bext", "" + val), val);
+        String r = writePq(
+                VECM + "ve_dnlp_method", "3",
+                VECM + "dnlp_respond", "1",
+                VECM + "ve_dnlp_set_bext", "" + val,
+                VECM + "ve_dnlp_blkext", "" + val);
+        if (curBt2390 == 1) {
+            String lr = applyOetfLut(curKneeFactor, curEotf, curBext, curWhtext);
+            if (!"OK".equals(lr)) r = lr;
+        }
+        return res(r, val);
     }
 
     public static String setDither(int val) {
@@ -635,14 +867,20 @@ public class AdbClient {
         if (val == 1) {
             curDnlp = 1; // BT.2390 套餐内会开启 DNLP，保持状态一致
             ensure10BitColorOutput();
+            writePq(VECM + "display_scale_factor", "2048", VECM + "hdr_mode", "2");
+            try { Thread.sleep(45); } catch (Exception ignored) {}
+            writePq(VECM + "hdr_mode", "1");
+            try { Thread.sleep(45); } catch (Exception ignored) {}
             String knee = "0,16,46,76,107,137,168,198,228,306,388,444,489,529,565,599,630,660,688,714,740,765,789,812,834,856,877,898,919,938,958,977,996,1014,1023";
             r = writePq(
-                    VECM + "hdr_mode", "1",
                     VECM + "knee_setting", knee,
                     VECM + "knee_interpolation_mode", "1",
-                    VECM + "knee_factor", "" + curKneeFactor,
                     VECM + "range_control", "0",
                     VECM + "sdr_saturation_offset", "" + curSdrSat,
+                    VECM + "hdr_flag", "11",
+                    VECM + "extra_sat_lut", curSdrSat + "," + curSdrSat,
+                    VECM + "ve_dnlp_method", "3",
+                    VECM + "dnlp_respond", "1",
                     "/sys/class/amvecm/dnlp", "0x1",
                     VECM + "dnlp_en", "1",
                     VECM + "dnlp_en_2", "1",
@@ -650,22 +888,34 @@ public class AdbClient {
                     VECM + "ve_dnlp_adj_level", "8",
                     VECM + "ve_dnlp_strength", "255",
                     VECM + "ve_dnlp_whtext", "" + curWhtext,
-                    VECM + "ve_dnlp_set_wext", "1",
-                    "/sys/class/amvecm/pq_user_set", "blk_ext_en",
+                    VECM + "ve_dnlp_set_wext", "" + curWhtext,
+                    VECM + "ve_dnlp_blkext", "" + curBext,
                     VECM + "ve_dnlp_set_bext", "" + curBext,
                     VECM + "vpp_dith_en", "" + curDither,
                     "/sys/module/di/parameters/nr10bit_surpport", "" + curNr10,
+                    VECM + "display_scale_factor", "2048",
                     VECM + "video_eotf_coeff", getEotfCoeff(curEotf),
-                    VECM + "reload_lut", "1",
-                    VECM + "reload_mtx", "1",
+                    "/sys/class/amvecm/saturation_hue_pre", getEffectiveSaturation() + " " + curHue,
                     "/sys/class/video/contrast", "" + curContrast);
+            if (isHdrSignal()) {
+                String mr = writePq(VECM + "reload_mtx", "16");
+                if (!"OK".equals(mr)) r = mr;
+            }
+            String lr = applyOetfLut(curKneeFactor, curEotf, curBext, curWhtext);
+            if (!"OK".equals(lr)) r = lr;
         } else {
+            String lr = applyOetfLut(0, 100, 0, 0);
+            writePq(VECM + "display_scale_factor", "2048", VECM + "hdr_mode", "1");
+            try { Thread.sleep(45); } catch (Exception ignored) {}
             r = writePq(
+                    VECM + "display_scale_factor", "2048",
                     VECM + "hdr_mode", "2",
-                    VECM + "knee_factor", "0",
                     VECM + "ve_dnlp_set_bext", "0",
-                    "/sys/class/video/contrast", "0",
-                    VECM + "reload_lut", "1");
+                    VECM + "ve_dnlp_set_wext", "0",
+                    "/sys/class/amvecm/saturation_hue_pre", curSaturation + " " + curHue,
+                    "/sys/class/video/contrast", "0");
+            try { Thread.sleep(45); } catch (Exception ignored) {}
+            if (!"OK".equals(lr)) r = lr;
         }
         return res(r, val);
     }
@@ -673,29 +923,47 @@ public class AdbClient {
     /** 曲线介入强度 knee_factor (0 ~ 256) */
     public static String setKneeFactor(int val) {
         curKneeFactor = val;
-        return res(writePq(VECM + "knee_factor", "" + val, VECM + "reload_lut", "1"), val);
+        return res(applyOetfLut(curKneeFactor, curEotf, curBext, curWhtext), val);
+    }
+
+    private static int getEffectiveSaturation() {
+        int extra = (curBt2390 == 1 && isHdrSignal()) ? (curSdrSat * 2 / 5) : 0;
+        return clipInt(curSaturation + extra, -128, 127);
     }
 
     /** HDR 广色域转 SDR 饱和度补偿 sdr_saturation_offset (0 ~ 100) */
     public static String setSdrSat(int val) {
         curSdrSat = val;
-        return res(writePq(VECM + "sdr_saturation_offset", "" + val, VECM + "reload_mtx", "1", VECM + "reload_lut", "1"), val);
+        return res(writePq(
+                VECM + "sdr_saturation_offset", "" + val,
+                VECM + "hdr_flag", "11",
+                VECM + "extra_sat_lut", val + "," + val,
+                "/sys/class/amvecm/saturation_hue_pre", getEffectiveSaturation() + " " + curHue), val);
     }
 
-    /** 白场高光动态拉伸 ve_dnlp_whtext (0 ~ 64) */
+    /** 白场高光动态拉伸 ve_dnlp_whtext (0 ~ 128) */
     public static String setWhtext(int val) {
         curWhtext = val;
-        return res(writePq(VECM + "ve_dnlp_whtext", "" + val, VECM + "ve_dnlp_set_wext", "1"), val);
+        String r = writePq(
+                VECM + "ve_dnlp_method", "3",
+                VECM + "dnlp_respond", "1",
+                VECM + "ve_dnlp_whtext", "" + val,
+                VECM + "ve_dnlp_set_wext", "" + val);
+        if (curBt2390 == 1) {
+            String lr = applyOetfLut(curKneeFactor, curEotf, curBext, curWhtext);
+            if (!"OK".equals(lr)) r = lr;
+        }
+        return res(r, val);
     }
 
     public static String setSaturation(int val) {
         curSaturation = val;
-        return res(writePq("/sys/class/amvecm/saturation_hue_pre", curSaturation + " " + curHue), val);
+        return res(writePq("/sys/class/amvecm/saturation_hue_pre", getEffectiveSaturation() + " " + curHue), val);
     }
 
     public static String setHue(int val) {
         curHue = val;
-        return res(writePq("/sys/class/amvecm/saturation_hue_pre", curSaturation + " " + curHue), val);
+        return res(writePq("/sys/class/amvecm/saturation_hue_pre", getEffectiveSaturation() + " " + curHue), val);
     }
 
     public static String setCm(int val) {
@@ -710,12 +978,11 @@ public class AdbClient {
     public static String setDnlp(int val) {
         curDnlp = val;
         if (val == 1) {
-            return res(writePq("/sys/class/amvecm/dnlp", "0x1", VECM + "dnlp_en", "1", VECM + "dnlp_en_2", "1",
-                    VECM + "dnlp_adj_level", "8", VECM + "ve_dnlp_adj_level", "8", VECM + "ve_dnlp_strength", "255",
-                    "/sys/class/amvecm/pq_user_set", "blk_ext_en"), val);
+            return res(writePq(VECM + "ve_dnlp_method", "3", VECM + "dnlp_respond", "1",
+                    "/sys/class/amvecm/dnlp", "0x1", VECM + "dnlp_en", "1", VECM + "dnlp_en_2", "1",
+                    VECM + "dnlp_adj_level", "8", VECM + "ve_dnlp_adj_level", "8", VECM + "ve_dnlp_strength", "255"), val);
         }
-        return res(writePq("/sys/class/amvecm/dnlp", "0x0", VECM + "dnlp_en", "0", VECM + "dnlp_en_2", "0",
-                "/sys/class/amvecm/pq_user_set", "blk_ext_dis"), val);
+        return res(writePq("/sys/class/amvecm/dnlp", "0x0", VECM + "dnlp_en", "0", VECM + "dnlp_en_2", "0"), val);
     }
 
     public static String resetAll() {
@@ -739,7 +1006,7 @@ public class AdbClient {
                 "/sys/class/video/contrast", "0", "/sys/class/amvecm/contrast", "0",
                 "/sys/class/amvecm/saturation_hue_pre", "0 0", "/sys/class/amvecm/dnlp", "0x0",
                 VECM + "dnlp_en", "0", VECM + "dnlp_en_2", "0",
-                "/sys/class/amvecm/pq_user_set", "blk_ext_dis", VECM + "cm_en", "0"), 0);
+                VECM + "cm_en", "0"), 0);
     }
 
     public static void initPqValues() {
@@ -750,6 +1017,22 @@ public class AdbClient {
         try {
             String c = readSysfs("/sys/class/amvecm/contrast");
             if (!c.isEmpty()) curContrast = Integer.parseInt(c);
+        } catch (Exception ignored) {}
+        try {
+            String hm = readSysfs("/sys/module/am_vecm/parameters/hdr_mode").trim();
+            if ("1".equals(hm)) {
+                curBt2390 = 1;
+            } else if ("2".equals(hm) || "0".equals(hm)) {
+                curBt2390 = 0;
+            }
+            String kf = readSysfs("/sys/module/am_vecm/parameters/knee_factor");
+            if (!kf.isEmpty()) {
+                curKneeFactor = Integer.parseInt(kf.trim());
+            }
+        } catch (Exception ignored) {}
+        try {
+            String ssat = readSysfs("/sys/module/am_vecm/parameters/sdr_saturation_offset");
+            if (!ssat.isEmpty()) curSdrSat = Integer.parseInt(ssat.trim());
         } catch (Exception ignored) {}
         try {
             String s = readSysfs("/sys/class/amvecm/saturation_hue_pre");
@@ -772,12 +1055,17 @@ public class AdbClient {
             }
         } catch (Exception ignored) {}
         try {
-            String e = readSysfs("/sys/module/am_vecm/parameters/video_eotf_coeff");
-            if (e.contains("2760")) curEotf = 110;
-            else if (e.contains("2634")) curEotf = 105;
-            else if (e.contains("2885")) curEotf = 115;
-            else if (e.contains("3136")) curEotf = 125;
-            else if (e.contains("2048")) curEotf = 100;
+            String e = readSysfs("/sys/module/am_vecm/parameters/video_eotf_coeff").trim();
+            if (!e.isEmpty()) {
+                String[] ep = e.split(",");
+                int c0 = Integer.parseInt(ep[0].trim());
+                int rs = (ep.length >= 10) ? Integer.parseInt(ep[9].trim()) : 1;
+                if (rs == 0) {
+                    curEotf = clipInt((int) Math.round(c0 * 200.0 / 2509.0), 100, 250);
+                } else {
+                    curEotf = (c0 <= 2509) ? 100 : clipInt((int) Math.round(c0 * 100.0 / 2509.0), 100, 250);
+                }
+            }
         } catch (Exception ignored) {}
         try {
             String bx = readSysfs("/sys/module/am_vecm/parameters/ve_dnlp_set_bext");
@@ -790,22 +1078,6 @@ public class AdbClient {
         try {
             String nr = readSysfs("/sys/module/di/parameters/nr10bit_surpport");
             if (!nr.isEmpty()) curNr10 = Integer.parseInt(nr);
-        } catch (Exception ignored) {}
-        try {
-            String kf = readSysfs("/sys/module/am_vecm/parameters/knee_factor");
-            if (!kf.isEmpty()) {
-                int kfv = Integer.parseInt(kf.trim());
-                if (kfv > 0) {
-                    curBt2390 = 1;
-                    curKneeFactor = kfv;
-                } else {
-                    curBt2390 = 0;
-                }
-            }
-        } catch (Exception ignored) {}
-        try {
-            String ssat = readSysfs("/sys/module/am_vecm/parameters/sdr_saturation_offset");
-            if (!ssat.isEmpty()) curSdrSat = Integer.parseInt(ssat.trim());
         } catch (Exception ignored) {}
         try {
             String wext = readSysfs("/sys/module/am_vecm/parameters/ve_dnlp_whtext");

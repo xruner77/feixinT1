@@ -15,11 +15,13 @@ fi
 echo 1 > /sys/module/am_vecm/parameters/hdr_mode
 echo 0,16,46,76,107,137,168,198,228,306,388,444,489,529,565,599,630,660,688,714,740,765,789,812,834,856,877,898,919,938,958,977,996,1014,1023 > /sys/module/am_vecm/parameters/knee_setting
 echo 1 > /sys/module/am_vecm/parameters/knee_interpolation_mode
-echo 256 > /sys/module/am_vecm/parameters/knee_factor
+echo 0 > /sys/module/am_vecm/parameters/knee_factor
 echo 0 > /sys/module/am_vecm/parameters/range_control
-echo 50 > /sys/module/am_vecm/parameters/sdr_saturation_offset
+echo 25 > /sys/module/am_vecm/parameters/sdr_saturation_offset
 
-# 4. 全开硬件直方图与白场拉伸 (DNLP White Extension)
+# 4. 全开硬件直方图与白场/黑场拉伸 (DNLP v3)
+echo 3 > /sys/module/am_vecm/parameters/ve_dnlp_method
+echo 1 > /sys/module/am_vecm/parameters/dnlp_respond
 echo 0x1 > /sys/class/amvecm/dnlp
 echo 1 > /sys/module/am_vecm/parameters/dnlp_en
 echo 1 > /sys/module/am_vecm/parameters/dnlp_en_2
@@ -27,13 +29,14 @@ echo 8 > /sys/module/am_vecm/parameters/dnlp_adj_level
 echo 8 > /sys/module/am_vecm/parameters/ve_dnlp_adj_level
 echo 255 > /sys/module/am_vecm/parameters/ve_dnlp_strength
 echo 16 > /sys/module/am_vecm/parameters/ve_dnlp_whtext
-echo 1 > /sys/module/am_vecm/parameters/ve_dnlp_set_wext
-echo blk_ext_en > /sys/class/amvecm/pq_user_set
+echo 16 > /sys/module/am_vecm/parameters/ve_dnlp_set_wext
+echo 8 > /sys/module/am_vecm/parameters/ve_dnlp_blkext
+echo 8 > /sys/module/am_vecm/parameters/ve_dnlp_set_bext
 
-# 5. 高光放大 1.10x 矩阵系数
+# 5. 高光放大 1.10x 矩阵系数 (VPP_LUT_OETF=8, VPP_MATRIX_EOTF=16)
 echo "2760,-507,0,-95,2347,0,-44,-177,2474,1" > /sys/module/am_vecm/parameters/video_eotf_coeff
-echo 1 > /sys/module/am_vecm/parameters/reload_lut
-echo 1 > /sys/module/am_vecm/parameters/reload_mtx
+echo 8 > /sys/module/am_vecm/parameters/reload_lut
+echo 16 > /sys/module/am_vecm/parameters/reload_mtx
 
 # 6. 反差对比度 35 (最后写入，防止驱动覆盖)
 echo 35 > /sys/class/video/contrast
